@@ -19,7 +19,7 @@ with tab_portal:
     st.divider()
 
     # --- Service Links ---
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
         st.subheader("Airflow")
@@ -27,16 +27,21 @@ with tab_portal:
         st.code("User: admin\nPasswort: admin", language=None)
 
     with col2:
+        st.subheader("Flower")
+        st.markdown("[Celery Monitor](http://localhost:5555)")
+        st.caption("Worker-Status & Task-Monitoring")
+
+    with col3:
         st.subheader("dbt Docs")
         st.markdown("[dbt Documentation](http://localhost:8081)")
         st.caption("Lineage Graph & Modell-Dokumentation")
 
-    with col3:
+    with col4:
         st.subheader("pgAdmin")
         st.markdown("[pgAdmin 4](http://localhost:5050)")
         st.caption("Datenbank-Administration & SQL-Editor")
 
-    with col4:
+    with col5:
         st.subheader("DBeaver / SQL")
         st.code(
             "Host:     localhost\n"

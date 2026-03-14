@@ -65,9 +65,18 @@ Beim ersten Start passiert automatisch:
 |---------|-----|-------|
 | **Streamlit Portal** | http://localhost:8501 | - |
 | **Airflow UI** | http://localhost:8080 | admin / admin |
+| **Flower** (Celery Monitor) | http://localhost:5555 | - |
 | **dbt Docs** | http://localhost:8081 | - |
 | **pgAdmin** | http://localhost:5050 | admin@demo.com / admin |
 | **PostgreSQL** | localhost:5432 | demo_user / demo_pass / DB: demo |
+
+### Worker skalieren
+```bash
+# Mehrere Celery-Worker starten (z.B. 3 parallele Worker)
+docker compose up -d --scale airflow-worker=3
+
+# Worker-Status in Flower beobachten: http://localhost:5555
+```
 
 ### Stoppen und Aufraeumen
 ```bash
@@ -118,24 +127,28 @@ Fuer einen sauberen Neustart einfach `init_raw_data` erneut triggern - der DAG m
 ## Architektur
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Docker Compose                                             │
-│                                                             │
-│  ┌──────────┐  ┌──────────────────────────────────────┐     │
-│  │ Postgres │  │ Airflow 3.0.2                        │     │
-│  │          │  │  ┌────────────┐  ┌───────────────┐   │     │
-│  │ demo DB  │◄─┤  │ API-Server │  │ DAG-Processor │   │     │
-│  │  raw     │  │  └────────────┘  └───────────────┘   │     │
-│  │  staging │  │  ┌────────────┐  ┌───────────────┐   │     │
-│  │  raw_vlt │  │  │ Scheduler  │  │  Triggerer    │   │     │
-│  │  mart    │  │  └────────────┘  └───────────────┘   │     │
-│  │          │  └──────────────────────────────────────┘     │
-│  │ airflow  │                                               │
-│  │   DB     │  ┌──────────┐ ┌─────────┐ ┌──────────┐       │
-│  └──────────┘  │ dbt Docs │ │ pgAdmin │ │Streamlit │       │
-│                │  :8081   │ │  :5050  │ │  :8501   │       │
-│                └──────────┘ └─────────┘ └──────────┘       │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│  Docker Compose                                                   │
+│                                                                   │
+│  ┌──────────┐  ┌────────────────────────────────────────────┐     │
+│  │ Postgres │  │ Airflow 3.0.2 (CeleryExecutor)             │     │
+│  │          │  │  ┌────────────┐  ┌───────────────┐         │     │
+│  │ demo DB  │◄─┤  │ API-Server │  │ DAG-Processor │         │     │
+│  │  raw     │  │  └────────────┘  └───────────────┘         │     │
+│  │  staging │  │  ┌────────────┐  ┌───────────────┐         │     │
+│  │  raw_vlt │  │  │ Scheduler  │  │  Triggerer    │         │     │
+│  │  mart    │  │  └────────────┘  └───────────────┘         │     │
+│  │          │  │  ┌────────────┐  ┌───────────────┐         │     │
+│  │ airflow  │  │  │   Worker   │  │    Flower     │ :5555   │     │
+│  │   DB     │  │  │ (skalierb.)│  │  (Monitoring) │         │     │
+│  └──────────┘  │  └────────────┘  └───────────────┘         │     │
+│                └────────────────────────────────────────────┘     │
+│  ┌──────────┐                                                     │
+│  │  Redis   │  ┌──────────┐ ┌─────────┐ ┌──────────┐             │
+│  │ (Broker) │  │ dbt Docs │ │ pgAdmin │ │Streamlit │             │
+│  └──────────┘  │  :8081   │ │  :5050  │ │  :8501   │             │
+│                └──────────┘ └─────────┘ └──────────┘             │
+└───────────────────────────────────────────────────────────────────┘
 
 Lokale Volumes (gemountet):
   ./dbt_project  →  dbt-Modelle, Seeds, Config
@@ -267,7 +280,7 @@ environment:
 ### Projekt-Struktur
 ```
 new_env/
-├── docker-compose.yml          # 8 Services (Postgres, 4x Airflow, dbt-docs, pgAdmin, Streamlit)
+├── docker-compose.yml          # 11 Services (Postgres, Redis, 6x Airflow, dbt-docs, pgAdmin, Streamlit)
 ├── Dockerfile.airflow          # Airflow 3 + Cosmos + dbt (isolierter venv)
 ├── Dockerfile.dbt              # dbt fuer Docs-Server
 ├── .env                        # Shared Secrets (Fernet Key, JWT)
@@ -289,5 +302,5 @@ new_env/
 
 - **AutomateDV Bridge + Effectivity Satellite**: Beide Macros sind in AutomateDV deprecated und wurden aus dem Projekt entfernt. Siehe [GitHub Issue](https://github.com/Datavault-UK/automate-dv/blob/master/macros/tables/postgres/bridge.sql).
 - **dbt Docs Server**: Nutzt `python -m http.server` statt `dbt docs serve`, da letzterer Verbindungsabbrueche auf Docker/macOS verursacht.
-- **Airflow 3 LocalExecutor**: Fuer Produktionsumgebungen wird CeleryExecutor + Redis empfohlen. LocalExecutor ist fuer diese Demo ausreichend.
+- **Airflow 3 CeleryExecutor**: Die Demo nutzt CeleryExecutor + Redis + Flower. Worker koennen mit `docker compose up -d --scale airflow-worker=3` skaliert werden.
 - **Keine inkrementellen Loads**: Die Demo zeigt einen Full-Load-Ansatz. Fuer inkrementelle Loads muessten die Staging-Modelle und die `init_raw_data`-Logik angepasst werden.
