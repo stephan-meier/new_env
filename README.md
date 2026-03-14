@@ -390,6 +390,34 @@ dbt test --select tag:quality tag:vault-integrity tag:freshness tag:business-log
 
 ---
 
+## Plattform-Kompatibilitaet (macOS, Windows, Ubuntu)
+
+Die gesamte Umgebung laeuft in Docker-Containern und ist plattformunabhaengig. **Kein einziges File im Projekt muss geaendert werden** - Docker loest die Architektur (ARM vs. Intel) automatisch auf. Alle verwendeten Base-Images (`postgres:16-alpine`, `apache/airflow:3.0.2`, `python:3.11-slim`, `redis:7.2-bookworm`, `dpage/pgadmin4`) bieten Multi-Arch-Images an.
+
+| Thema | macOS (ARM) | Windows (Intel) | Ubuntu (Intel) |
+|-------|-------------|-----------------|----------------|
+| **Docker** | Docker Desktop | Docker Desktop (WSL2) | Docker Engine (nativ) |
+| **Images** | `linux/arm64` (auto) | `linux/amd64` (auto) | `linux/amd64` (auto) |
+| **Performance** | Gut (native ARM) | Etwas langsamer (WSL2-Layer) | Am schnellsten (nativer Kernel) |
+| **Pfade/Ports** | Identisch | Identisch | Identisch |
+
+### Windows-spezifische Hinweise
+
+- **Docker Desktop mit WSL2-Backend** muss aktiviert sein (nicht Hyper-V)
+- Repo am besten unter WSL2 klonen (`/home/user/`, nicht `/mnt/c/`) fuer deutlich bessere I/O-Performance bei Volume-Mounts
+- Line-Endings: `git config core.autocrlf input` setzen, damit CSVs und Shell-Scripts LF behalten
+
+### Ubuntu-spezifische Hinweise
+
+- Docker Engine statt Docker Desktop (leichtgewichtiger):
+  ```bash
+  sudo apt install docker.io docker-compose-v2
+  sudo usermod -aG docker $USER
+  ```
+- Nach dem `usermod`-Befehl neu einloggen oder `newgrp docker` ausfuehren
+
+---
+
 ## Bekannte Einschraenkungen
 
 - **AutomateDV Bridge + Effectivity Satellite**: Beide Macros sind in AutomateDV deprecated und wurden aus dem Projekt entfernt. Siehe [GitHub Issue](https://github.com/Datavault-UK/automate-dv/blob/master/macros/tables/postgres/bridge.sql).
