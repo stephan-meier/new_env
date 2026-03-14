@@ -193,6 +193,7 @@ services:
       - "8501:8501"
     volumes:
       - ./streamlit:/app
+      - ./README.md:/README.md:ro
     depends_on:
       postgres:
         condition: service_healthy
