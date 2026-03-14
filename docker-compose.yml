@@ -262,6 +262,7 @@ services:
     volumes:
       - ./streamlit:/app
       - ./README.md:/README.md:ro
+      - ./dbt_project/target:/usr/app/dbt/target:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -48,7 +48,7 @@ with DAG(
 
     dbt_test = BashOperator(
         task_id="dbt_test",
-        bash_command=f"{DBT_CMD} test --profiles-dir {DBT_DIR}",
+        bash_command=f"{DBT_CMD} test --store-failures --profiles-dir {DBT_DIR}",
     )
 
     dbt_deps >> dbt_seed >> dbt_run_staging >> dbt_run_raw_vault >> dbt_run_marts >> dbt_test

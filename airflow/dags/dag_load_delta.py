@@ -98,5 +98,11 @@ with DAG(
         bash_command=f"{DBT} run --select marts --profiles-dir /usr/app/dbt",
     )
 
+    # --- Phase 3: dbt test (mit store-failures fuer Visualisierung) ---
+    dbt_test = BashOperator(
+        task_id="dbt_test",
+        bash_command=f"{DBT} test --store-failures --profiles-dir /usr/app/dbt",
+    )
+
     # Alle Upsert-Tasks parallel, dann dbt sequentiell
-    upsert_tasks >> dbt_run_staging >> dbt_run_raw_vault >> dbt_run_marts
+    upsert_tasks >> dbt_run_staging >> dbt_run_raw_vault >> dbt_run_marts >> dbt_test

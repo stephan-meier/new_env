@@ -1,7 +1,9 @@
 import streamlit as st
 import psycopg2
 import pandas as pd
+import json
 from pathlib import Path
+from datetime import datetime
 
 st.set_page_config(
     page_title="Data Vault Demo Portal",
@@ -17,7 +19,9 @@ def get_connection():
     )
 
 # --- Navigation ---
-tab_portal, tab_incremental, tab_readme = st.tabs(["Portal", "Inkrementelle Loads", "Dokumentation"])
+tab_portal, tab_quality, tab_incremental, tab_readme = st.tabs(
+    ["Portal", "Datenqualitaet", "Inkrementelle Loads", "Dokumentation"]
+)
 
 # ==================== TAB: PORTAL ====================
 with tab_portal:
@@ -162,6 +166,166 @@ with tab_portal:
         ],
     }
     st.dataframe(pd.DataFrame(dag_data), use_container_width=True, hide_index=True)
+
+# ==================== TAB: DATENQUALITAET ====================
+with tab_quality:
+    st.title("Datenqualitaet (dbt-expectations)")
+    st.markdown("""
+    Ergebnisse des letzten `dbt test --store-failures` Laufs.
+    Die Resultate stammen aus `run_results.json` (dbt Artefakt) und den
+    `dbt_test__audit`-Tabellen in PostgreSQL.
+    """)
+    st.divider()
+
+    # --- run_results.json parsen ---
+    RUN_RESULTS_PATH = Path("/usr/app/dbt/target/run_results.json")
+
+    def load_run_results():
+        if not RUN_RESULTS_PATH.exists():
+            return None, None
+        with open(RUN_RESULTS_PATH) as f:
+            data = json.load(f)
+        rows = []
+        for r in data.get("results", []):
+            uid = r.get("unique_id", "")
+            # Test-Name aus unique_id extrahieren
+            test_name = uid.split(".")[-1] if "." in uid else uid
+            # Modell-Name aus unique_id ableiten
+            parts = uid.split(".")
+            short_name = parts[2] if len(parts) > 2 else test_name
+            # Schicht bestimmen
+            if "stg_" in uid:
+                layer = "Staging"
+            elif "hub_" in uid or "sat_" in uid or "lnk_" in uid or "pit_" in uid:
+                layer = "Raw Vault"
+            elif "mart_" in uid:
+                layer = "Marts"
+            else:
+                layer = "Andere"
+            # dbt-expectations vs. Standard
+            is_expectation = "dbt_expectations" in uid
+            test_type = "dbt-expectations" if is_expectation else "Standard"
+            rows.append({
+                "Schicht": layer,
+                "Typ": test_type,
+                "Test": short_name,
+                "Status": r.get("status", "unknown"),
+                "Fehler": r.get("failures", 0) or 0,
+                "Laufzeit (s)": round(r.get("execution_time", 0), 3),
+                "Meldung": r.get("message") or "",
+            })
+        df = pd.DataFrame(rows)
+        ts = data.get("metadata", {}).get("generated_at", "")
+        return df, ts
+
+    if st.button("Ergebnisse neu laden", key="refresh_quality"):
+        st.cache_data.clear()
+
+    results_df, generated_at = load_run_results()
+
+    if results_df is not None and not results_df.empty:
+        # --- Zusammenfassung mit Metriken ---
+        if generated_at:
+            st.caption(f"Letzter Lauf: {generated_at}")
+
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        total = len(results_df)
+        passed = len(results_df[results_df["Status"] == "pass"])
+        warned = len(results_df[results_df["Status"] == "warn"])
+        failed = len(results_df[results_df["Status"].isin(["fail", "error"])])
+        col_m1.metric("Tests gesamt", total)
+        col_m2.metric("Bestanden", passed)
+        col_m3.metric("Warnungen", warned)
+        col_m4.metric("Fehler", failed)
+
+        st.divider()
+
+        # --- Filter ---
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            layer_filter = st.multiselect(
+                "Schicht", options=sorted(results_df["Schicht"].unique()),
+                default=sorted(results_df["Schicht"].unique()),
+                key="layer_filter",
+            )
+        with col_f2:
+            status_filter = st.multiselect(
+                "Status", options=sorted(results_df["Status"].unique()),
+                default=sorted(results_df["Status"].unique()),
+                key="status_filter",
+            )
+
+        filtered = results_df[
+            results_df["Schicht"].isin(layer_filter)
+            & results_df["Status"].isin(status_filter)
+        ]
+
+        # Farbcodierung
+        def color_status(val):
+            if val == "pass":
+                return "background-color: #1a472a; color: #4ade80"
+            elif val == "warn":
+                return "background-color: #4a3728; color: #fbbf24"
+            elif val in ("fail", "error"):
+                return "background-color: #4a2028; color: #f87171"
+            return ""
+
+        styled = filtered.style.map(color_status, subset=["Status"])
+        st.dataframe(styled, use_container_width=True, hide_index=True)
+
+        # --- Demo-Highlight: shipped_date Fehler ---
+        st.divider()
+        st.subheader("Demo-Highlight: shipped_date < order_date")
+        st.markdown("""
+        Der Test `expect_column_pair_values_A_to_be_greater_than_B` hat aufgedeckt,
+        dass zahlreiche Bestellungen ein Versanddatum **vor** dem Bestelldatum haben.
+        Das ist ein fachliches Datenqualitaetsproblem, das Standard-Tests (`not_null`, `unique`)
+        nie finden wuerden.
+        """)
+
+        @st.cache_data(ttl=30)
+        def get_shipped_before_ordered():
+            try:
+                conn = get_connection()
+                query = """
+                    SELECT
+                        order_id,
+                        order_date::date AS bestellt,
+                        shipped_date::date AS versendet,
+                        (order_date::date - shipped_date::date) AS tage_zu_frueh,
+                        order_status,
+                        ship_name,
+                        ship_country
+                    FROM staging.stg_orders
+                    WHERE shipped_date IS NOT NULL
+                      AND shipped_date < order_date
+                    ORDER BY (order_date - shipped_date) DESC
+                """
+                df = pd.read_sql(query, conn)
+                conn.close()
+                return df
+            except Exception:
+                return None
+
+        bad_orders = get_shipped_before_ordered()
+        if bad_orders is not None and not bad_orders.empty:
+            st.warning(f"{len(bad_orders)} Bestellungen mit Versand VOR Bestelldatum gefunden!")
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.metric("Betroffene Bestellungen", len(bad_orders))
+            with col_d2:
+                st.metric("Max. Tage zu frueh", int(bad_orders["tage_zu_frueh"].max()))
+            st.dataframe(bad_orders.head(20), use_container_width=True, hide_index=True)
+            if len(bad_orders) > 20:
+                st.caption(f"Zeige 20 von {len(bad_orders)} betroffenen Bestellungen (sortiert nach Schwere)")
+        else:
+            st.info("Keine Anomalien gefunden oder noch kein Test-Lauf ausgefuehrt.")
+
+    else:
+        st.info(
+            "Keine Test-Resultate gefunden. Bitte zuerst `dbt_classic` oder `load_delta` "
+            "ausfuehren - die DAGs enthalten `dbt test --store-failures`."
+        )
 
 # ==================== TAB: INKREMENTELLE LOADS ====================
 with tab_incremental:
