@@ -1,0 +1,6 @@
+"ID","LAST_NAME","FIRST_NAME","EMAIL","COMPANY","PHONE","ADDRESS1","ADDRESS2","CITY","STATE","POSTAL_CODE","COUNTRY","CHANGE_DATE"
+1,Gray,Clarence,cgray0@newmail.com,Jetpulse,"1-(260)601-5114","1200 Innovation Drive",,San Francisco,California,"94105",United States,2024-01-15
+2,Cooper,Emily,ecooper1@outlook.com,Skippad,"1-(251)614-5034","88 Market Street",,San Francisco,California,"94105",United States,2024-01-15
+101,Mueller,Anna,amueller@techcorp.de,TechCorp,"49-(89)1234-5678","Leopoldstrasse 42",,Muenchen,Bayern,"80802",Germany,2024-01-15
+102,Schmidt,Thomas,tschmidt@dataworks.ch,DataWorks,"41-(44)987-6543","Bahnhofstrasse 15",,Zuerich,Zuerich,"8001",Switzerland,2024-01-15
+103,Dubois,Marie,mdubois@analytics.fr,AnalyticsFR,"33-(1)4567-8901","12 Rue de Rivoli",,Paris,Ile-de-France,"75001",France,2024-01-15

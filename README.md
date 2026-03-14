@@ -114,7 +114,24 @@ DAG **`dbt_cosmos`** triggern:
 - Der Dependency-Graph ist in der Airflow UI sichtbar
 - 43 Tasks mit vollstaendiger Parallelisierung
 
-### 4. Ergebnisse erkunden
+### 4. Inkrementellen Delta-Load ausfuehren
+DAG **`load_delta`** triggern:
+- **Kein DROP** - die Delta-CSVs werden per COPY in die bestehenden Raw-Tabellen **angehaengt**
+- `dbt run` laeuft **ohne** `--full-refresh`, sodass AutomateDVs Incremental-Logik greift:
+  - Hubs: nur neue Business Keys werden eingefuegt
+  - Satellites: nur geaenderte Hashdiffs erzeugen neue Versionen (Historisierung!)
+  - Links: nur neue Beziehungs-Kombinationen
+
+**Delta-Daten (Batch 2, `change_date` = 2024-01-15):**
+| Datei | Inhalt | Effekt im Vault |
+|-------|--------|----------------|
+| `CUSTOMERS_DELTA.csv` | 3 neue + 2 geaenderte Kunden | Hub: +3, Sat: +5 |
+| `ORDERS_DELTA.csv` | 5 neue Bestellungen | Hub: +5, alle Links: +5 |
+| `ORDER_DETAILS_DELTA.csv` | 8 neue Positionen | Link Order-Product: +8, Sat: +8 |
+
+→ Im **Streamlit Portal** (Tab "Inkrementelle Loads") koennen die Vorher/Nachher-Zahlen und die Satellite-Historisierung live geprueft werden.
+
+### 5. Ergebnisse erkunden
 - **pgAdmin** (localhost:5050): SQL-Abfragen auf alle Schemas
 - **dbt Docs** (localhost:8081): Lineage-Graph und Modell-Dokumentation
 - **DBeaver**: Direktverbindung zu PostgreSQL
@@ -349,4 +366,4 @@ new_env/
 - **AutomateDV Bridge + Effectivity Satellite**: Beide Macros sind in AutomateDV deprecated und wurden aus dem Projekt entfernt. Siehe [GitHub Issue](https://github.com/Datavault-UK/automate-dv/blob/master/macros/tables/postgres/bridge.sql).
 - **dbt Docs Server**: Nutzt `python -m http.server` statt `dbt docs serve`, da letzterer Verbindungsabbrueche auf Docker/macOS verursacht.
 - **Airflow 3 CeleryExecutor**: Die Demo nutzt CeleryExecutor + Redis + Flower. Worker koennen mit `docker compose up -d --scale airflow-worker=3` skaliert werden.
-- **Keine inkrementellen Loads**: Die Demo zeigt einen Full-Load-Ansatz. Fuer inkrementelle Loads muessten die Staging-Modelle und die `init_raw_data`-Logik angepasst werden.
+- **Inkrementelle Loads**: Der DAG `load_delta` demonstriert Delta-Loads mit AutomateDVs eingebauter Incremental-Logik. Die Delta-CSVs in `daten/delta/` enthalten neue und geaenderte Datensaetze.
