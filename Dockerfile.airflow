@@ -22,11 +22,11 @@ RUN python -m venv /home/airflow/dbt_venv && \
     /home/airflow/dbt_venv/bin/pip install --no-cache-dir \
         "dbt-postgres==1.10.0"
 
-# dbt deps vorinstallieren (using the venv dbt binary)
-COPY --chown=airflow:root dbt_project/packages.yml /usr/app/dbt/packages.yml
-COPY --chown=airflow:root dbt_project/dbt_project.yml /usr/app/dbt/dbt_project.yml
-COPY --chown=airflow:root dbt_project/profiles.yml /usr/app/dbt/profiles.yml
+# dbt Projekt kopieren und Manifest generieren (fuer Cosmos LoadMode.DBT_MANIFEST)
+COPY --chown=airflow:root dbt_project/ /usr/app/dbt/
 WORKDIR /usr/app/dbt
-RUN /home/airflow/dbt_venv/bin/dbt deps
+RUN /home/airflow/dbt_venv/bin/dbt deps && \
+    POSTGRES_HOST=dummy /home/airflow/dbt_venv/bin/dbt ls --profiles-dir /usr/app/dbt --target dev 2>/dev/null; \
+    /home/airflow/dbt_venv/bin/dbt parse --profiles-dir /usr/app/dbt --target dev 2>/dev/null || true
 
 WORKDIR /opt/airflow

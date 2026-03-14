@@ -20,6 +20,10 @@ x-airflow-common:
     AIRFLOW_CONN_DEMO_POSTGRES: postgresql://demo_user:demo_pass@postgres:5432/demo
     # dbt profiles.yml nutzt POSTGRES_HOST
     POSTGRES_HOST: postgres
+    # Cosmos: dbt-ls-Cache aktiviert, aber Telemetrie-Propagation deaktiviert
+    # weil Airflow 3.0 strikte Param-Validierung einen Hash-Mismatch bei
+    # __cosmos_telemetry_metadata__ verursacht (bekannter Bug Cosmos <1.14)
+    AIRFLOW__COSMOS__PROPAGATE_TELEMETRY: "False"
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/config:/opt/airflow/config
