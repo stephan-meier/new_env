@@ -1,4 +1,28 @@
-WITH orders AS (
+WITH sat_order_current AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY order_hk ORDER BY load_datetime DESC) AS rn
+    FROM {{ ref('sat_order') }}
+),
+
+sat_customer_current AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY customer_hk ORDER BY load_datetime DESC) AS rn
+    FROM {{ ref('sat_customer') }}
+),
+
+sat_employee_current AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY employee_hk ORDER BY load_datetime DESC) AS rn
+    FROM {{ ref('sat_employee') }}
+),
+
+sat_order_detail_current AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY order_product_hk ORDER BY load_datetime DESC) AS rn
+    FROM {{ ref('sat_order_detail') }}
+),
+
+orders AS (
     SELECT
         ho.order_hk,
         ho.order_id,
@@ -8,8 +32,8 @@ WITH orders AS (
         so.payment_type,
         so.shipping_fee
     FROM {{ ref('hub_order') }} ho
-    INNER JOIN {{ ref('sat_order') }} so
-        ON ho.order_hk = so.order_hk
+    INNER JOIN sat_order_current so
+        ON ho.order_hk = so.order_hk AND so.rn = 1
 ),
 
 customer_link AS (
@@ -25,8 +49,8 @@ customers AS (
         sc.last_name || ', ' || sc.first_name AS customer_name,
         sc.company
     FROM {{ ref('hub_customer') }} hc
-    INNER JOIN {{ ref('sat_customer') }} sc
-        ON hc.customer_hk = sc.customer_hk
+    INNER JOIN sat_customer_current sc
+        ON hc.customer_hk = sc.customer_hk AND sc.rn = 1
 ),
 
 employee_link AS (
@@ -41,8 +65,8 @@ employees AS (
         he.employee_hk,
         se.last_name || ', ' || se.first_name AS employee_name
     FROM {{ ref('hub_employee') }} he
-    INNER JOIN {{ ref('sat_employee') }} se
-        ON he.employee_hk = se.employee_hk
+    INNER JOIN sat_employee_current se
+        ON he.employee_hk = se.employee_hk AND se.rn = 1
 ),
 
 order_items AS (
@@ -51,8 +75,8 @@ order_items AS (
         COUNT(*) AS line_items,
         SUM(sod.quantity * sod.unit_price * (1 - sod.discount / 100)) AS order_total
     FROM {{ ref('lnk_order_product') }} lop
-    INNER JOIN {{ ref('sat_order_detail') }} sod
-        ON lop.order_product_hk = sod.order_product_hk
+    INNER JOIN sat_order_detail_current sod
+        ON lop.order_product_hk = sod.order_product_hk AND sod.rn = 1
     GROUP BY lop.order_hk
 )
 

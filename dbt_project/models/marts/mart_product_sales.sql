@@ -1,4 +1,16 @@
-WITH products AS (
+WITH sat_product_current AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY product_hk ORDER BY load_datetime DESC) AS rn
+    FROM {{ ref('sat_product') }}
+),
+
+sat_order_detail_current AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY order_product_hk ORDER BY load_datetime DESC) AS rn
+    FROM {{ ref('sat_order_detail') }}
+),
+
+products AS (
     SELECT
         hp.product_hk,
         hp.product_id,
@@ -8,8 +20,8 @@ WITH products AS (
         sp.list_price,
         sp.standard_cost
     FROM {{ ref('hub_product') }} hp
-    INNER JOIN {{ ref('sat_product') }} sp
-        ON hp.product_hk = sp.product_hk
+    INNER JOIN sat_product_current sp
+        ON hp.product_hk = sp.product_hk AND sp.rn = 1
 ),
 
 sales AS (
@@ -20,8 +32,8 @@ sales AS (
         sod.unit_price,
         sod.discount
     FROM {{ ref('lnk_order_product') }} lop
-    INNER JOIN {{ ref('sat_order_detail') }} sod
-        ON lop.order_product_hk = sod.order_product_hk
+    INNER JOIN sat_order_detail_current sod
+        ON lop.order_product_hk = sod.order_product_hk AND sod.rn = 1
 )
 
 SELECT

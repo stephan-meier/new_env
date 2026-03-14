@@ -1,4 +1,16 @@
-WITH customers AS (
+WITH sat_customer_current AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY customer_hk ORDER BY load_datetime DESC) AS rn
+    FROM {{ ref('sat_customer') }}
+),
+
+sat_order_detail_current AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY order_product_hk ORDER BY load_datetime DESC) AS rn
+    FROM {{ ref('sat_order_detail') }}
+),
+
+customers AS (
     SELECT
         hc.customer_hk,
         hc.customer_id,
@@ -7,8 +19,8 @@ WITH customers AS (
         sc.company,
         sc.email
     FROM {{ ref('hub_customer') }} hc
-    INNER JOIN {{ ref('sat_customer') }} sc
-        ON hc.customer_hk = sc.customer_hk
+    INNER JOIN sat_customer_current sc
+        ON hc.customer_hk = sc.customer_hk AND sc.rn = 1
 ),
 
 order_links AS (
@@ -25,8 +37,8 @@ order_products AS (
         sod.unit_price,
         sod.discount
     FROM {{ ref('lnk_order_product') }} lop
-    INNER JOIN {{ ref('sat_order_detail') }} sod
-        ON lop.order_product_hk = sod.order_product_hk
+    INNER JOIN sat_order_detail_current sod
+        ON lop.order_product_hk = sod.order_product_hk AND sod.rn = 1
 )
 
 SELECT
