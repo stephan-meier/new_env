@@ -14,7 +14,7 @@ st.markdown("Zentrale Uebersicht fuer die dbt + AutomateDV + Airflow Demo-Umgebu
 st.divider()
 
 # --- Service Links ---
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.subheader("Airflow")
@@ -27,6 +27,11 @@ with col2:
     st.caption("Lineage Graph & Modell-Dokumentation")
 
 with col3:
+    st.subheader("pgAdmin")
+    st.markdown("[pgAdmin 4](http://localhost:5050)")
+    st.caption("Datenbank-Administration & SQL-Editor")
+
+with col4:
     st.subheader("DBeaver / SQL")
     st.code(
         "Host:     localhost\n"
