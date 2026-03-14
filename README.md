@@ -353,10 +353,39 @@ new_env/
 │   ├── models/raw_vault/       # 4 Hubs, 3 Links, 5 Sats, 2 PITs
 │   └── models/marts/           # 3 Business-Tabellen
 ├── airflow/
-│   ├── dags/                   # 3 DAGs (init, classic, cosmos)
+│   ├── dags/                   # 4 DAGs (init, classic, cosmos, delta)
 │   └── config/airflow.cfg      # Shared Secrets fuer JWT-Auth
 ├── postgres/init/              # DB-Init-Scripte (Schemas)
 └── streamlit/                  # Portal-App
+```
+
+---
+
+## Datenqualitaet mit dbt-expectations
+
+Neben den Standard-Tests (`unique`, `not_null`) setzt diese Demo [dbt-expectations](https://github.com/calogica/dbt-expectations) ein - eine dbt-native Portierung von Great Expectations mit ueber 50 fachlichen Test-Macros.
+
+### Test-Uebersicht (19 Tests)
+
+| Schicht | Test | Zweck | Ergebnis |
+|---------|------|-------|----------|
+| **Staging** | `expect_column_pair_values_A_to_be_greater_than_B` | shipped_date >= order_date | **WARN: 304 Verletzungen!** |
+| **Staging** | `expect_column_values_to_match_regex` | Email-Format-Validierung | PASS |
+| **Staging** | `expect_column_values_to_be_between` | Versandgebuehr 0-100, Rabatt 0-100%, Preis > 0, Menge > 0 | PASS |
+| **Staging** | `expect_column_distinct_count_to_equal` | Genau 4 Bestellstatus | PASS |
+| **Raw Vault** | `expect_column_proportion_of_unique_values` | Hub: 100% unique, Satellite: < 100% (Historisierung!) | PASS |
+| **Raw Vault** | `expect_compound_columns_to_be_unique` | Link-Kombinationen eindeutig | PASS |
+| **Raw Vault** | `expect_row_values_to_have_recent_data` | Frische Daten nach Delta-Load | PASS |
+| **Marts** | `expect_table_row_count_to_be_between` | Plausible Zeilenanzahl | PASS |
+| **Marts** | `expect_column_values_to_be_between` | Revenue > 0, Orders >= 1, Menge >= 0 | PASS |
+
+### Demo-Highlight: shipped_date < order_date
+
+Der Test `expect_column_pair_values_A_to_be_greater_than_B` deckt auf, dass **304 von 605 Bestellungen** ein `shipped_date` haben, das **vor** dem `order_date` liegt - ein echtes Datenqualitaetsproblem, das kein `not_null`/`unique`-Test je finden wuerde.
+
+```bash
+# Tests ausfuehren (innerhalb des Airflow-Workers):
+dbt test --select tag:quality tag:vault-integrity tag:freshness tag:business-logic
 ```
 
 ---

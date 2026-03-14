@@ -10,6 +10,13 @@ models:
       - name: customer_id
         tests:
           - not_null
+      # dbt-expectations: Email-Format-Pruefung
+      - name: email
+        tests:
+          - dbt_expectations.expect_column_values_to_match_regex:
+              regex: "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9.-]+[.][a-zA-Z]{2,}$"
+              config:
+                tags: ["quality"]
 
   - name: stg_employees
     description: "Staging-Modell fuer Mitarbeiter mit Data Vault Hash-Keys"
@@ -22,7 +29,19 @@ models:
           - not_null
 
   - name: stg_orders
-    description: "Staging-Modell fuer Bestellungen mit Data Vault Hash-Keys fuer Hub und Links"
+    description: "Staging-Modell fuer Bestellungen mit Data Vault Hash-Keys"
+    # --- DEMO-HIGHLIGHT: shipped_date MUSS nach order_date liegen ---
+    # Dieser Test schlaegt ABSICHTLICH fehl! In den Daten gibt es
+    # Bestellungen die VOR dem Bestelldatum als versendet markiert sind.
+    tests:
+      - dbt_expectations.expect_column_pair_values_A_to_be_greater_than_B:
+          column_A: shipped_date
+          column_B: order_date
+          or_equal: true
+          row_condition: "shipped_date IS NOT NULL"
+          config:
+            severity: warn
+            tags: ["quality", "demo-highlight"]
     columns:
       - name: order_hk
         tests:
@@ -30,6 +49,21 @@ models:
       - name: order_id
         tests:
           - not_null
+      # Versandgebuehr: fachlich zwischen 0 und 100
+      - name: shipping_fee
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              config:
+                tags: ["quality"]
+      # Genau 4 bekannte Bestellstatus
+      - name: order_status
+        tests:
+          - dbt_expectations.expect_column_distinct_count_to_equal:
+              value: 4
+              config:
+                tags: ["quality"]
 
   - name: stg_order_details
     description: "Staging-Modell fuer Bestellpositionen mit Data Vault Hash-Keys"
@@ -37,6 +71,30 @@ models:
       - name: order_product_hk
         tests:
           - not_null
+      # Rabatt: 0% bis maximal 100%
+      - name: discount
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              config:
+                tags: ["quality"]
+      # Stueckpreis muss positiv sein
+      - name: unit_price
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: true
+              config:
+                tags: ["quality"]
+      # Menge muss positiv sein
+      - name: quantity
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: true
+              config:
+                tags: ["quality"]
 
   - name: stg_products
     description: "Staging-Modell fuer Produkte mit Data Vault Hash-Keys"
