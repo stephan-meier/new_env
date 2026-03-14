@@ -1,0 +1,33 @@
+name: 'northwind_vault'
+version: '1.0.0'
+config-version: 2
+profile: 'northwind_vault'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+seeds:
+  northwind_vault:
+    +schema: raw
+
+models:
+  northwind_vault:
+    staging:
+      +schema: staging
+      +materialized: view
+    raw_vault:
+      +schema: raw_vault
+      +materialized: incremental
+      pit:
+        +materialized: table
+      bridges:
+        +materialized: table
+    marts:
+      +schema: mart
+      +materialized: table

@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir dbt-postgres==1.9.*
+
+WORKDIR /usr/app/dbt
+
+# Kopiere nur Config-Dateien fuer gecachten dbt deps Layer
+COPY dbt_project/packages.yml /usr/app/dbt/packages.yml
+COPY dbt_project/dbt_project.yml /usr/app/dbt/dbt_project.yml
+COPY dbt_project/profiles.yml /usr/app/dbt/profiles.yml
+RUN dbt deps
+
+CMD ["dbt", "docs", "serve", "--port", "8081"]

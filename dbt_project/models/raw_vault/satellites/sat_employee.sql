@@ -1,0 +1,10 @@
+{{ automate_dv.sat(src_pk='employee_hk',
+                    src_hashdiff='employee_hashdiff',
+                    src_payload=['last_name', 'first_name', 'email',
+                                 'avatar', 'job_title', 'department', 'manager_id',
+                                 'phone', 'address1', 'address2',
+                                 'city', 'state', 'postal_code', 'country'],
+                    src_eff='effective_from',
+                    src_ldts='load_datetime',
+                    src_source='record_source',
+                    source_model='stg_employees') }}

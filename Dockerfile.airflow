@@ -1,0 +1,32 @@
+FROM apache/airflow:3.0.2-python3.12
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends git postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
+USER airflow
+
+# ---------- Cosmos + Airflow providers (installed in Airflow's own env) ----------
+# astronomer-cosmos 1.13.1 supports Airflow >=2.9 (including 3.x)
+# apache-airflow-providers-postgres 6.x is required for Airflow 3
+RUN pip install --no-cache-dir \
+    "astronomer-cosmos==1.13.1" \
+    "apache-airflow-providers-postgres==6.6.0" \
+    "apache-airflow-providers-fab==3.5.0"
+
+# ---------- dbt in an isolated virtualenv (avoids protobuf / dependency conflicts) ----------
+# dbt-core and Airflow 3 have conflicting transitive deps (protobuf, grpcio).
+# The official Astronomer recommendation is to install dbt in a separate venv
+# and point Cosmos ExecutionConfig.dbt_executable_path to it.
+RUN python -m venv /home/airflow/dbt_venv && \
+    /home/airflow/dbt_venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /home/airflow/dbt_venv/bin/pip install --no-cache-dir \
+        "dbt-postgres==1.10.0"
+
+# dbt deps vorinstallieren (using the venv dbt binary)
+COPY --chown=airflow:root dbt_project/packages.yml /usr/app/dbt/packages.yml
+COPY --chown=airflow:root dbt_project/dbt_project.yml /usr/app/dbt/dbt_project.yml
+COPY --chown=airflow:root dbt_project/profiles.yml /usr/app/dbt/profiles.yml
+WORKDIR /usr/app/dbt
+RUN /home/airflow/dbt_venv/bin/dbt deps
+
+WORKDIR /opt/airflow

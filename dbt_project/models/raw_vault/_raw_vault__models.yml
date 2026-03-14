@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  # Hubs
+  - name: hub_customer
+    description: "Hub fuer Kunden-Entitaet"
+    columns:
+      - name: customer_hk
+        tests:
+          - unique
+          - not_null
+  - name: hub_employee
+    description: "Hub fuer Mitarbeiter-Entitaet"
+    columns:
+      - name: employee_hk
+        tests:
+          - unique
+          - not_null
+  - name: hub_product
+    description: "Hub fuer Produkt-Entitaet"
+    columns:
+      - name: product_hk
+        tests:
+          - unique
+          - not_null
+  - name: hub_order
+    description: "Hub fuer Bestell-Entitaet"
+    columns:
+      - name: order_hk
+        tests:
+          - unique
+          - not_null
+
+  # Links
+  - name: lnk_order_customer
+    description: "Link zwischen Bestellung und Kunde"
+    columns:
+      - name: order_customer_hk
+        tests:
+          - unique
+          - not_null
+  - name: lnk_order_employee
+    description: "Link zwischen Bestellung und Mitarbeiter"
+    columns:
+      - name: order_employee_hk
+        tests:
+          - unique
+          - not_null
+  - name: lnk_order_product
+    description: "Link zwischen Bestellung und Produkt (aus Bestellpositionen)"
+    columns:
+      - name: order_product_hk
+        tests:
+          - unique
+          - not_null
+
+  # Satellites
+  - name: sat_customer
+    description: "Satellite mit Kunden-Attributen"
+  - name: sat_employee
+    description: "Satellite mit Mitarbeiter-Attributen"
+  - name: sat_product
+    description: "Satellite mit Produkt-Attributen"
+  - name: sat_order
+    description: "Satellite mit Bestell-Attributen"
+  - name: sat_order_detail
+    description: "Satellite mit Bestellpositions-Attributen"
+
+  # Effectivity Satellite
+  - name: eff_sat_order_customer
+    description: "Effectivity Satellite fuer Bestellung-Kunde Beziehung"
+
+  # PIT
+  - name: pit_customer
+    description: "Point-in-Time Tabelle fuer Kunden"
+  - name: pit_order
+    description: "Point-in-Time Tabelle fuer Bestellungen"
+
+  # Bridge
+  - name: bridge_order_customer_product
+    description: "Bridge Tabelle: Bestellung -> Kunde -> Produkt"

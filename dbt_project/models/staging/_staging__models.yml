@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: "Staging-Modell fuer Kunden mit Data Vault Hash-Keys"
+    columns:
+      - name: customer_hk
+        tests:
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+
+  - name: stg_employees
+    description: "Staging-Modell fuer Mitarbeiter mit Data Vault Hash-Keys"
+    columns:
+      - name: employee_hk
+        tests:
+          - not_null
+      - name: employee_id
+        tests:
+          - not_null
+
+  - name: stg_orders
+    description: "Staging-Modell fuer Bestellungen mit Data Vault Hash-Keys fuer Hub und Links"
+    columns:
+      - name: order_hk
+        tests:
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+
+  - name: stg_order_details
+    description: "Staging-Modell fuer Bestellpositionen mit Data Vault Hash-Keys"
+    columns:
+      - name: order_product_hk
+        tests:
+          - not_null
+
+  - name: stg_products
+    description: "Staging-Modell fuer Produkte mit Data Vault Hash-Keys"
+    columns:
+      - name: product_hk
+        tests:
+          - not_null
+      - name: product_id
+        tests:
+          - not_null

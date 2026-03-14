@@ -1,0 +1,11 @@
+{{ automate_dv.sat(src_pk='order_hk',
+                    src_hashdiff='order_hashdiff',
+                    src_payload=['order_date', 'shipped_date', 'ship_name',
+                                 'ship_address1', 'ship_address2', 'ship_city',
+                                 'ship_state', 'ship_postal_code', 'ship_country',
+                                 'shipping_fee', 'payment_type', 'paid_date',
+                                 'order_status'],
+                    src_eff='effective_from',
+                    src_ldts='load_datetime',
+                    src_source='record_source',
+                    source_model='stg_orders') }}

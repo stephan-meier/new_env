@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: mart_revenue_per_customer
+    description: "Umsatz pro Kunde, aggregiert ueber alle Bestellungen"
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+
+  - name: mart_order_overview
+    description: "Bestelluebersicht mit Kunden-, Mitarbeiter- und Positionsdaten"
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+
+  - name: mart_product_sales
+    description: "Produkt-Verkaufsstatistiken mit Umsatz und Marge"
+    columns:
+      - name: product_id
+        tests:
+          - unique
+          - not_null
