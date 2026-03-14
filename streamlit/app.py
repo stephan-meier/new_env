@@ -19,8 +19,8 @@ def get_connection():
     )
 
 # --- Navigation ---
-tab_portal, tab_quality, tab_incremental, tab_readme = st.tabs(
-    ["Portal", "Datenqualitaet", "Inkrementelle Loads", "Dokumentation"]
+tab_portal, tab_quality, tab_incremental, tab_devtips, tab_readme = st.tabs(
+    ["Portal", "Datenqualitaet", "Inkrementelle Loads", "Entwickler-Tipps", "Dokumentation"]
 )
 
 # ==================== TAB: PORTAL ====================
@@ -464,6 +464,238 @@ with tab_incremental:
     5. **Vault-Status erneut pruefen** → Satellites sind gewachsen, Hubs nur minimal
     6. **Historisierung** unten pruefen → Kunden 1+2 haben je 2 Versionen
     """)
+
+# ==================== TAB: ENTWICKLER-TIPPS ====================
+with tab_devtips:
+    st.title("Entwickler-Tipps")
+    st.markdown("Hinweise fuer die lokale Entwicklung mit dieser Demo-Umgebung.")
+    st.divider()
+
+    # --- Lokales dbt Setup ---
+    st.subheader("1. Lokales dbt Setup (venv oder Conda)")
+    st.markdown("""
+    Fuer die Entwicklung mit VSCode und **dbt Power User** braucht man dbt lokal
+    installiert. Die Docker-Container reichen dafuer nicht - die Extension ruft
+    `dbt compile`, `dbt parse` und Autocomplete direkt auf.
+    """)
+    col_venv, col_conda = st.columns(2)
+    with col_venv:
+        st.markdown("**Python venv**")
+        st.code(
+            "cd ~/Documents/work/new_env\n"
+            "python3 -m venv .venv\n"
+            "source .venv/bin/activate\n"
+            "pip install dbt-postgres dbt-expectations",
+            language="bash",
+        )
+    with col_conda:
+        st.markdown("**Conda**")
+        st.code(
+            "conda create -n dbt_demo python=3.11 -y\n"
+            "conda activate dbt_demo\n"
+            "pip install dbt-postgres dbt-expectations",
+            language="bash",
+        )
+    st.info(
+        "Die `profiles.yml` verwendet `POSTGRES_HOST` mit Default `localhost`. "
+        "Solange die Docker-Container laufen, verbindet sich das lokale dbt "
+        "direkt mit dem gleichen PostgreSQL auf Port 5432."
+    )
+
+    st.divider()
+
+    # --- VSCode Extensions ---
+    st.subheader("2. VSCode Extensions")
+    extensions = {
+        "Extension": [
+            "dbt Power User",
+            "SQLFluff",
+            "YAML",
+            "Python",
+            "Rainbow CSV",
+            "Docker",
+            "GitLens",
+            "Even Better TOML",
+        ],
+        "ID": [
+            "innoverio.vscode-dbt-power-user",
+            "dorzey.vscode-sqlfluff",
+            "redhat.vscode-yaml",
+            "ms-python.python",
+            "mechatroner.rainbow-csv",
+            "ms-azuretools.vscode-docker",
+            "eamodio.gitlens",
+            "tamasfe.even-better-toml",
+        ],
+        "Zweck": [
+            "dbt Autocomplete, Lineage-Preview, Compile-on-Save, Go-to-Definition",
+            "SQL Linting und Formatting (konfigurierbar fuer dbt/Jinja)",
+            "YAML-Validierung fuer dbt Schema-Dateien",
+            "Python-Interpreter fuer venv/Conda, Debugging",
+            "CSV-Dateien farblich hervorgehoben (Seeds, Delta-CSVs)",
+            "Docker-Container verwalten, Logs anzeigen",
+            "Git-Blame, Diff-Ansicht, History",
+            "TOML-Syntax fuer Streamlit-Config",
+        ],
+    }
+    st.dataframe(pd.DataFrame(extensions), use_container_width=True, hide_index=True)
+    st.code(
+        "# Alle auf einmal installieren:\n"
+        "code --install-extension innoverio.vscode-dbt-power-user\n"
+        "code --install-extension dorzey.vscode-sqlfluff\n"
+        "code --install-extension redhat.vscode-yaml\n"
+        "code --install-extension mechatroner.rainbow-csv\n"
+        "code --install-extension ms-azuretools.vscode-docker",
+        language="bash",
+    )
+
+    st.divider()
+
+    # --- dbt Power User Konfiguration ---
+    st.subheader("3. dbt Power User konfigurieren")
+    st.markdown("""
+    In den VSCode Settings (`Cmd+,`) oder `.vscode/settings.json`:
+    """)
+    st.code(
+        '{\n'
+        '  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",\n'
+        '  "dbt.dbtPythonPathOverride": "${workspaceFolder}/.venv/bin/python",\n'
+        '  "dbt.projectDir": "${workspaceFolder}/dbt_project",\n'
+        '  "dbt.profilesDir": "${workspaceFolder}/dbt_project",\n'
+        '  "files.associations": {\n'
+        '    "*.sql": "jinja-sql"\n'
+        '  }\n'
+        '}',
+        language="json",
+    )
+    st.markdown("""
+    **Was dbt Power User bietet:**
+    - **Cmd+Click** auf `ref('hub_customer')` springt zum Modell
+    - **Compile-on-Save**: Zeigt das kompilierte SQL in einem Side-Panel
+    - **Lineage-Graph**: Visueller Dependency-Graph direkt in VSCode
+    - **Autocomplete**: `ref()`, `source()`, Macros, Column-Names
+    """)
+
+    st.divider()
+
+    # --- Nützliche dbt-Befehle ---
+    st.subheader("4. Nuetzliche dbt-Befehle")
+    st.markdown("Lokal ausfuehren (im `dbt_project/`-Verzeichnis mit aktiviertem venv):")
+    commands = {
+        "Befehl": [
+            "dbt debug",
+            "dbt compile",
+            "dbt run --select stg_customers",
+            "dbt run --select raw_vault",
+            "dbt run --select +mart_revenue_per_customer",
+            "dbt test --select tag:quality",
+            "dbt test --store-failures",
+            "dbt docs generate && dbt docs serve",
+            "dbt deps",
+            "dbt parse",
+        ],
+        "Beschreibung": [
+            "Verbindung und Konfiguration pruefen",
+            "Alle Modelle kompilieren (ohne auszufuehren) - zeigt SQL in target/compiled/",
+            "Ein einzelnes Modell ausfuehren",
+            "Alle Modelle einer Schicht ausfuehren",
+            "Ein Modell mit allen Upstream-Abhaengigkeiten ausfuehren (+)",
+            "Nur Tests mit bestimmtem Tag ausfuehren",
+            "Tests ausfuehren und fehlerhafte Zeilen in DB speichern",
+            "Dokumentation generieren und lokal anzeigen (Port 8080)",
+            "Packages installieren (automate_dv, dbt_expectations)",
+            "Manifest generieren (noetig fuer Cosmos nach Modellaenderungen)",
+        ],
+    }
+    st.dataframe(pd.DataFrame(commands), use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # --- Cosmos Manifest aktualisieren ---
+    st.subheader("5. Nach Modellaenderungen: Cosmos Manifest aktualisieren")
+    st.markdown("""
+    Der `dbt_cosmos` DAG verwendet `LoadMode.DBT_MANIFEST` und liest ein
+    vorbereitetes `manifest.json`. Nach Aenderungen an den dbt-Modellen
+    muss dieses Manifest aktualisiert werden:
+    """)
+    st.code(
+        "# 1. Lokal Manifest generieren:\n"
+        "cd dbt_project && dbt parse\n"
+        "\n"
+        "# 2. Airflow-Image neu bauen (Manifest wird eingebacken):\n"
+        "docker compose build airflow-init\n"
+        "\n"
+        "# 3. Airflow-Services neu starten:\n"
+        "docker compose up -d",
+        language="bash",
+    )
+    st.warning(
+        "Ohne Manifest-Update sieht der Cosmos DAG die neuen Modelle nicht! "
+        "Der `dbt_classic` DAG ist davon nicht betroffen (nutzt BashOperator)."
+    )
+
+    st.divider()
+
+    # --- Neues Data Vault Modell anlegen ---
+    st.subheader("6. Neues Data Vault Modell anlegen")
+    st.markdown("""
+    Workflow fuer ein neues Hub/Link/Satellite mit AutomateDV:
+
+    **Schritt 1:** Staging-Modell erstellen (`models/staging/stg_neue_quelle.sql`)
+    - `automate_dv.stage()` Macro verwenden
+    - Hash-Keys, Hashdiffs und derived columns definieren
+    - Source in `_staging__sources.yml` registrieren
+
+    **Schritt 2:** Vault-Objekt erstellen (z.B. `models/raw_vault/hubs/hub_neue_entitaet.sql`)
+    - `automate_dv.hub()`, `.link()` oder `.sat()` Macro verwenden
+    - `ref()` auf das Staging-Modell
+
+    **Schritt 3:** Tests und Dokumentation in `_raw_vault__models.yml` ergaenzen
+
+    **Schritt 4:** Testen
+    """)
+    st.code(
+        "# Staging kompilieren und pruefen:\n"
+        "dbt compile --select stg_neue_quelle\n"
+        "# In target/compiled/ das SQL pruefen\n"
+        "\n"
+        "# Modell ausfuehren:\n"
+        "dbt run --select +hub_neue_entitaet\n"
+        "\n"
+        "# Tests laufen lassen:\n"
+        "dbt test --select hub_neue_entitaet",
+        language="bash",
+    )
+
+    st.divider()
+
+    # --- Troubleshooting ---
+    st.subheader("7. Troubleshooting")
+    troubles = {
+        "Problem": [
+            "dbt kann sich nicht mit Postgres verbinden",
+            "Airflow DAG erscheint nicht in der UI",
+            "Cosmos DAG zeigt alte Modelle",
+            "dbt test schlaegt fehl mit 'relation does not exist'",
+            "Container startet nicht / haengt",
+            "dbt Power User zeigt keine Autocomplete-Vorschlaege",
+        ],
+        "Loesung": [
+            "Docker-Container laufen? `docker compose ps` → Postgres muss 'healthy' sein. "
+            "Lokal: `dbt debug --profiles-dir .` ausfuehren.",
+            "DAG-Processor braucht bis zu 30s. Syntax pruefen: "
+            "`docker compose exec airflow-scheduler python -c \"exec(open('/opt/airflow/dags/datei.py').read())\"` ",
+            "`dbt parse` lokal ausfuehren, dann `docker compose build airflow-init && docker compose up -d`",
+            "Zuerst `dbt run --select staging` ausfuehren, dann Raw Vault. "
+            "Oder: `dbt run --full-refresh` fuer einen Neuaufbau.",
+            "`docker compose logs <service>` pruefen. "
+            "Neustart: `docker compose restart <service>`. "
+            "Komplett neu: `docker compose down && docker compose up -d --build`",
+            "Python-Interpreter auf venv setzen (Cmd+Shift+P → 'Python: Select Interpreter'). "
+            "`dbt deps` lokal ausfuehren. VSCode neu starten.",
+        ],
+    }
+    st.dataframe(pd.DataFrame(troubles), use_container_width=True, hide_index=True)
 
 # ==================== TAB: DOKUMENTATION ====================
 with tab_readme:
