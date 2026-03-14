@@ -240,6 +240,52 @@ environment:
 
 **In Airflow 2.x war das kein Problem**, weil der Webserver und Scheduler ueber die gemeinsame Datenbank kommunizierten und keine API-basierte Task-Execution stattfand.
 
+### Astronomer Cosmos + Airflow 3: Zwei kritische Bugs
+
+Beim Einsatz von **astronomer-cosmos 1.13.1** mit Airflow 3.0.2 traten zwei zusammenhaengende Probleme auf:
+
+**Problem 1: `ParamValidationError` auf `__cosmos_telemetry_metadata__`**
+
+Cosmos fuegt jedem DAG einen versteckten Parameter `__cosmos_telemetry_metadata__` hinzu, der Telemetrie-Daten als Base64-encodierten String enthaelt. Dieser wird mit einem JSON-Schema `const`-Constraint validiert. In Airflow 3 ist die Param-Validierung **strikt**: Der Hash wird beim DAG-Parsing generiert, aendert sich aber bis zur Task-Execution (z.B. durch Cache-Invalidierung), wodurch die Validierung fehlschlaegt.
+
+```
+ParamValidationError: Invalid input for param __cosmos_telemetry_metadata__:
+'eNpl...' was expected
+Failed validating 'const' in schema
+```
+
+**Loesung:**
+```yaml
+AIRFLOW__COSMOS__PROPAGATE_TELEMETRY: "False"
+```
+
+**Problem 2: DAG-Parse-Timeout bei `dbt ls` ohne Cache**
+
+Wenn man den Cosmos-Cache deaktiviert (als Workaround fuer Problem 1), fuehrt Cosmos bei **jedem DAG-Parse** `dbt deps` + `dbt ls` aus. In einem Container mit dbt im isolierten venv dauert das >30 Sekunden und ueberschreitet den Airflow `dagbag_import_timeout`:
+
+```
+AirflowTaskTimeout: DagBag import timeout for dag_dbt_cosmos.py after 30.0s
+```
+
+**Loesung: `LoadMode.DBT_MANIFEST`**
+
+Statt `dbt ls` beim Parsen liest Cosmos ein vorbereitetes `manifest.json`:
+```python
+from cosmos.constants import LoadMode
+
+render_config=RenderConfig(
+    load_method=LoadMode.DBT_MANIFEST,
+)
+project_config=ProjectConfig(
+    dbt_project_path=DBT_PROJECT_PATH,
+    manifest_path=DBT_PROJECT_PATH / "target" / "manifest.json",
+)
+```
+
+Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount bereitgestellt. **Vorteil**: Sofortiges DAG-Parsing ohne Subprocess-Aufruf.
+
+> **Beide Probleme existieren in Airflow 2.x nicht**, weil dort (a) die Param-Validierung weniger strikt ist und (b) laengere Parse-Zeiten toleriert werden.
+
 ### Weitere Upgrade-Stolpersteine
 
 1. **`EXECUTION_API_SERVER_URL` ist Pflicht**
@@ -265,7 +311,7 @@ environment:
 4. **`schedule_interval` entfernt** - nur noch `schedule=None` oder `schedule="@daily"` etc.
 
 5. **Offizielles Docker-Compose als Referenz nutzen**
-   Das offizielle Template unter `https://airflow.apache.org/docs/apache-airflow/3.0.2/docker-compose.yaml` ist die beste Ausgangsbasis. Es verwendet CeleryExecutor + Redis, kann aber auf LocalExecutor vereinfacht werden (wie in dieser Demo).
+   Das offizielle Template unter `https://airflow.apache.org/docs/apache-airflow/3.0.2/docker-compose.yaml` ist die beste Ausgangsbasis. Diese Demo verwendet CeleryExecutor + Redis + Flower fuer Worker-Skalierung und Monitoring.
 
 ---
 
