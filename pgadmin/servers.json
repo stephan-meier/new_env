@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Demo PostgreSQL",
+      "Group": "Data Vault Demo",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "demo",
+      "Username": "demo_user",
+      "PassFile": "/pgpass",
+      "SSLMode": "prefer"
+    }
+  }
+}
