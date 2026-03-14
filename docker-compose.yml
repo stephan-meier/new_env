@@ -16,6 +16,8 @@ x-airflow-common:
     AIRFLOW_CONFIG: "/opt/airflow/config/airflow.cfg"
     # Connection fuer DAGs
     AIRFLOW_CONN_DEMO_POSTGRES: postgresql://demo_user:demo_pass@postgres:5432/demo
+    # dbt profiles.yml nutzt POSTGRES_HOST
+    POSTGRES_HOST: postgres
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/config:/opt/airflow/config

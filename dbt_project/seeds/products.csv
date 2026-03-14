@@ -1,4 +1,4 @@
-"ID","PRODUCT_CODE","PRODUCT_NAME","DESCRIPTION","STANDARD_COST","LIST_PRICE","TARGET_LEVEL","REORDER_LEVEL","MINIMUM_REORDER_QUANTITY","QUANTITY_PER_UNIT","DISCONTINUED","CATEGORY","CHANGE_DATE"
+"id","product_code","product_name","description","standard_cost","list_price","target_level","reorder_level","minimum_reorder_quantity","quantity_per_unit","discontinued","category","change_date"
 601,P1,Nikkon DS90,,67.0900,23.3900,75,67,12,"50",1,Camera,2016-05-01
 602,P2,Canon T90,,82.8300,93.8400,92,76,92,"56",0,Camera,2016-05-01
 603,P3,Dell Inspirion,,82.8300,93.8400,92,76,92,"56",0,Laptop,2016-05-01

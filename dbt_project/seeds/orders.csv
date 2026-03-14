@@ -1,4 +1,4 @@
-"ID","EMPLOYEE_ID","CUSTOMER_ID","ORDER_DATE","SHIPPED_DATE","SHIP_NAME","SHIP_ADDRESS1","SHIP_ADDRESS2","SHIP_CITY","SHIP_STATE","SHIP_POSTAL_CODE","SHIP_COUNTRY","SHIPPING_FEE","PAYMENT_TYPE","PAID_DATE","ORDER_STATUS","CHANGE_DATE"
+"id","employee_id","customer_id","order_date","shipped_date","ship_name","ship_address1","ship_address2","ship_city","ship_state","ship_postal_code","ship_country","shipping_fee","payment_type","paid_date","order_status","change_date"
 4001,204,40,2016-04-05 00:00:00.000,2016-11-06 00:00:00.000,Jean Fuller,"93 Spohn Place",,Manggekompo,,,Indonesia,8.1400,Card,2016-10-12 00:00:00.000,On Hold,2016-11-06 00:00:00.000
 4002,204,95,2017-01-29 00:00:00.000,2016-05-28 00:00:00.000,Diane Holmes,"46 Eliot Trail",,Virginia Beach,Virginia,"23459",United States,1.5500,Checque,2016-06-27 00:00:00.000,Shipped,2017-01-29 00:00:00.000
 4003,218,54,2016-08-19 00:00:00.000,2016-12-08 00:00:00.000,Jerry Frazier,"23 Sundown Junction",,Obodivka,,,Ukraine,2.2900,Cash,2016-09-27 00:00:00.000,On Hold,2016-12-08 00:00:00.000
@@ -599,4 +599,3 @@
 4598,212,76,2016-04-13 00:00:00.000,2016-08-10 00:00:00.000,Eugene Kelly,"838 Becker Plaza",,Laredo,Texas,"78044",United States,4.9000,Checque,2016-10-23 00:00:00.000,New,2016-10-23 00:00:00.000
 4599,208,29,2016-04-16 00:00:00.000,2016-05-15 00:00:00.000,Jimmy Mcdonald,"0 Dayton Place",,Rochester,New York,"14646",United States,1.5600,Checque,2017-01-14 00:00:00.000,Complete,2017-01-14 00:00:00.000
 4600,208,2,2016-04-26 00:00:00.000,2016-04-06 00:00:00.000,Stephen Jacobs,"7131 Scoville Terrace",,Phoenix,Arizona,"85020",United States,4.5200,Cash,2017-01-22 00:00:00.000,On Hold,2017-01-22 00:00:00.000
-

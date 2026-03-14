@@ -1,4 +1,4 @@
-"ID","LAST_NAME","FIRST_NAME","EMAIL","AVATAR","JOB_TITLE","DEPARTMENT","MANAGER_ID","PHONE","ADDRESS1","ADDRESS2","CITY","STATE","POSTAL_CODE","COUNTRY","CHANGE_DATE"
+"id","last_name","first_name","email","avatar","job_title","department","manager_id","phone","address1","address2","city","state","postal_code","country","change_date"
 201,Harris,George,gharris0@pagesperso-orange.fr,https://robohash.org/modilaboriosammolestiae.bmp?size=50x50&set=set1,Administrative Assistant I,Toys,,"1-(210)270-8536","2 Bayside Drive",,San Antonio,Texas,"78240",United States,2016-05-01
 202,Hayes,Rachel,rhayes1@si.edu,https://robohash.org/seddistinctiodolorem.jpg?size=50x50&set=set1,Design Engineer,Books,,"1-(971)797-2729","30 Anhalt Street",,Portland,Oregon,"97232",United States,2016-05-01
 203,Palmer,Anthony,apalmer2@posterous.com,https://robohash.org/vitaererumdolore.png?size=50x50&set=set1,Health Coach II,Toys,,"1-(702)984-2108","02809 4th Pass",,North Las Vegas,Nevada,"89036",United States,2016-05-01

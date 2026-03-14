@@ -1,4 +1,4 @@
-"ID","LAST_NAME","FIRST_NAME","EMAIL","COMPANY","PHONE","ADDRESS1","ADDRESS2","CITY","STATE","POSTAL_CODE","COUNTRY","CHANGE_DATE"
+"id","last_name","first_name","email","company","phone","address1","address2","city","state","postal_code","country","change_date"
 1,Gray,Clarence,cgray0@rambler.ru,Jetpulse,"1-(260)601-5114","02937 Merrick Avenue",,Fort Wayne,Indiana,"46805",United States,2016-05-01
 2,Cooper,Emily,ecooper1@macromedia.com,Skippad,"1-(251)614-5034","60 Forster Crossing",,Mobile,Alabama,"36605",United States,2016-05-01
 3,Wilson,George,gwilson2@xinhuanet.com,Riffpath,"1-(901)445-9881","52 Browning Center",,Memphis,Tennessee,"38181",United States,2016-05-01
