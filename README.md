@@ -36,7 +36,7 @@ Northwind-aehnliches Bestellsystem mit 5 Tabellen:
 ## Installation
 
 ### Voraussetzungen
-- **Docker Desktop** (macOS/Windows/Linux) mit mindestens 4 GB RAM
+- **Docker Desktop** (macOS/Windows/Linux) mit mindestens 16 GB RAM
 - **Git** (optional, zum Klonen)
 - **DBeaver** oder anderer SQL-Client (optional, pgAdmin ist integriert)
 
@@ -45,6 +45,31 @@ Northwind-aehnliches Bestellsystem mit 5 Tabellen:
 # Repository klonen
 git clone <repo-url> && cd new_env
 
+# .env-Datei erstellen (WICHTIG - wird nicht mit Git ausgeliefert!)
+cp .env.example .env
+```
+
+**Secrets generieren und in `.env` eintragen:**
+```bash
+# Fernet Key (fuer Airflow Connection/Variable-Verschluesselung)
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Falls cryptography nicht installiert: alternativ mit openssl
+openssl rand -base64 32
+
+# API Secret + JWT Secret (fuer Airflow 3 Container-Kommunikation)
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+> **Warum 3 verschiedene Keys?**
+> - `FERNET_KEY`: Verschluesselt Passwoerter in Airflow Connections/Variables in der DB
+> - `API__SECRET_KEY`: Signiert die API-Session (wie Flask SECRET_KEY)
+> - `API_AUTH__JWT_SECRET`: Signiert JWT-Tokens zwischen Scheduler/Worker und API-Server
+>
+> **Alle 3 muessen auf allen Airflow-Containern identisch sein!** Siehe [Airflow 3 Upgrade-Hinweise](#airflow-3-vs-2x-upgrade-hinweise) fuer Details.
+
+```bash
 # Alle Container bauen und starten
 docker compose up -d --build
 
