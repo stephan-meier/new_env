@@ -2,8 +2,74 @@ version: 2
 
 sources:
   - name: psa
-    description: "PSA (Persistent Staging Area) - historisiert via NG Generator"
+    description: >
+      Persistent Staging Area (PSA) - historisierte Rohdaten, verwaltet durch
+      den NG Generator (Stored Procedures). Die PSA ist die stabile Grundlage
+      des optionalen PSA-Pfads: SCD2-Historisierung, Content-Hashing und
+      Delete Detection passieren hier, BEVOR dbt den Data Vault aufbaut.
+      Der Data Vault ist damit eine deterministische Funktion der PSA und
+      kann jederzeit ohne Datenverlust neu generiert werden.
     schema: psa
+    freshness:
+      warn_after: {count: 48, period: hour}
+      error_after: {count: 72, period: hour}
+    loaded_at_field: ng_insert_date
+
     tables:
+      # -- Haupttabelle: SCD2-historisiert --
+      - name: customers_psa
+        description: >
+          SCD2-historisierte Kundentabelle. Jede fachliche Aenderung erzeugt
+          eine neue Version (ng_is_current=1), die alte wird geschlossen
+          (ng_valid_to gesetzt, ng_is_current=0). Geloeschte Records werden
+          per ng_is_deleted=1 markiert (Tombstone-Pattern).
+          Verwaltet durch: psa.run_customers_psa_load() + run_customers_delete_detection()
+        columns:
+          - name: customers_sk
+            description: "Surrogate Key (IDENTITY), technischer PK"
+          - name: id
+            description: "Fachlicher Business Key aus dem Quellsystem"
+          - name: ng_rowhash
+            description: "SHA256-Hash ueber alle fachlichen Attribute - steuert Versionierung"
+          - name: ng_valid_from
+            description: "SCD2: Beginn der Gueltigkeit dieser Version"
+          - name: ng_valid_to
+            description: "SCD2: Ende der Gueltigkeit (infinity = aktuelle Version)"
+          - name: ng_is_current
+            description: "1 = aktuelle Version, 0 = historisch"
+          - name: ng_is_deleted
+            description: "1 = im Quellsystem geloescht (Tombstone)"
+          - name: ng_insert_date
+            description: "Zeitpunkt des INSERTs in die PSA (Audit-Trail)"
+
+      # -- Views auf die PSA-Tabelle --
       - name: v_customers_cur
-        description: "Aktuelle Kundenversion aus der PSA (ng_is_current = 1)"
+        description: >
+          Aktuelle, nicht geloeschte Kundenversion (ng_is_current=1 AND ng_is_deleted=0).
+          Dies ist der Standard-Einstiegspunkt fuer dbt-Staging-Modelle.
+        loaded_at_field: ng_insert_date
+
+      - name: v_customers_fhi
+        description: >
+          Volle Kundenhistorie - alle Versionen inkl. geschlossener und geloeschter.
+          Nuetzlich fuer Zeitpunkt-Abfragen (AS-OF) und Audit-Analysen.
+        loaded_at_field: ng_insert_date
+
+      - name: v_customers_cln
+        description: >
+          Clean-View: Deduplizierte Quelldaten mit Content-Hash (ng_rowhash).
+          Basis fuer den SCD2-MERGE in run_customers_psa_load().
+          Nicht direkt von dbt genutzt, aber sichtbar im Lineage.
+        freshness: null  # Kein Freshness-Check (View ohne eigenen Zeitstempel)
+
+      - name: v_customers_ifc
+        description: >
+          Interface-View: 1:1-Abbild der Quelltabelle mit explizitem Typ-Casting.
+          Erste Schicht der PSA-Pipeline, entkoppelt von der physischen Quelle.
+        freshness: null  # Kein Freshness-Check
+
+      - name: v_customers_del
+        description: >
+          Geloeschte Records (ng_is_deleted=1). Nuetzlich fuer Monitoring
+          und Audit: welche Kunden wurden aus dem Quellsystem entfernt?
+        freshness: null  # Kein Freshness-Check
