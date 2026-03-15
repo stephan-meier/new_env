@@ -669,8 +669,62 @@ with tab_devtips:
 
     st.divider()
 
+    # --- dbt-MCP: KI-gestuetzte Entwicklung ---
+    st.subheader("7. Ausblick: dbt-MCP (KI-gestuetzte dbt-Entwicklung)")
+    st.markdown("""
+    [dbt-MCP](https://github.com/dbt-labs/dbt-mcp) ist ein MCP-Server von dbt Labs,
+    der dbt-Funktionalitaet fuer KI-Assistenten bereitstellt. Damit kann man in
+    **Claude Desktop**, **VS Code Copilot Chat** oder **Cursor** per natuerlicher
+    Sprache mit dem dbt-Projekt interagieren.
+    """)
+
+    col_works, col_cloud = st.columns(2)
+    with col_works:
+        st.markdown("**Lokal nutzbar (ohne dbt Cloud)**")
+        st.markdown("""
+        - `run`, `test`, `compile`, `show`, `parse` per Chat
+        - YAML und Staging-Modelle automatisch generieren
+        - Lineage aus `manifest.json` inspizieren
+        """)
+    with col_cloud:
+        st.markdown("**Nur mit dbt Cloud**")
+        st.markdown("""
+        - Discovery API (Model Health, Semantic Search)
+        - Semantic Layer (Metriken-Abfragen)
+        - `text_to_sql` (natuerliche Sprache → SQL)
+        """)
+
+    with st.expander("Setup-Anleitung (optional)"):
+        st.code(
+            "# Python >= 3.12 erforderlich\n"
+            "pip install dbt-mcp\n"
+            "\n"
+            "# Claude Desktop: ~/.claude/claude_desktop_config.json\n"
+            '{\n'
+            '  "mcpServers": {\n'
+            '    "dbt": {\n'
+            '      "command": "uvx",\n'
+            '      "args": ["dbt-mcp"],\n'
+            '      "env": {\n'
+            '        "DBT_PROJECT_DIR": "/pfad/zu/new_env/dbt_project",\n'
+            '        "DBT_MCP_ENABLE_DBT_CLI": "true",\n'
+            '        "DBT_MCP_ENABLE_DBT_CODEGEN": "true"\n'
+            '      }\n'
+            '    }\n'
+            '  }\n'
+            '}',
+            language="json",
+        )
+        st.warning(
+            "dbt-MCP erlaubt KI-Assistenten, dbt-Befehle auszufuehren die "
+            "Datenbank-Objekte veraendern koennen. In einer Demo-Umgebung "
+            "unkritisch, in Produktion Tool-Kategorien sorgfaeltig einschraenken."
+        )
+
+    st.divider()
+
     # --- Troubleshooting ---
-    st.subheader("7. Troubleshooting")
+    st.subheader("8. Troubleshooting")
     troubles = {
         "Problem": [
             "dbt kann sich nicht mit Postgres verbinden",

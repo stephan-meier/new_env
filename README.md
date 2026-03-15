@@ -496,3 +496,50 @@ Die DAGs `dbt_classic` und `dbt_cosmos` verwenden **bewusst kein** `--full-refre
 - **dbt Docs Server**: Nutzt `python -m http.server` statt `dbt docs serve`, da letzterer Verbindungsabbrueche auf Docker/macOS verursacht.
 - **Airflow 3 CeleryExecutor**: Die Demo nutzt CeleryExecutor + Redis + Flower. Worker koennen mit `docker compose up -d --scale airflow-worker=3` skaliert werden.
 - **Inkrementelle Loads**: Der DAG `load_delta` demonstriert Delta-Loads mit AutomateDVs eingebauter Incremental-Logik. Die Delta-CSVs in `daten/delta/` enthalten neue und geaenderte Datensaetze.
+
+---
+
+## Ausblick: Optionale Erweiterungen
+
+### dbt-MCP - KI-gestuetzte dbt-Entwicklung
+
+[dbt-MCP](https://github.com/dbt-labs/dbt-mcp) ist ein MCP-Server (Model Context Protocol) von dbt Labs, der dbt-Funktionalitaet als strukturierte Tools fuer KI-Assistenten bereitstellt. Damit kann man z.B. in **Claude Desktop**, **VS Code Copilot Chat** oder **Cursor** per natuerlicher Sprache mit dem dbt-Projekt interagieren:
+
+- *"Zeig mir die Lineage von mart_revenue_per_customer"*
+- *"Generiere ein YAML fuer ein neues Staging-Modell"*
+- *"Fuehre die Tests mit Tag 'quality' aus und zeig mir die Ergebnisse"*
+- *"Compiliere hub_customer und zeig mir das generierte SQL"*
+
+**Funktionsumfang ohne dbt Cloud (lokal nutzbar):**
+
+| Kategorie | Was es kann |
+|-----------|-------------|
+| **dbt CLI** | `run`, `test`, `compile`, `show`, `parse`, `docs` - alles per Chat steuerbar |
+| **Codegen** | YAML-Definitionen und Staging-Modelle automatisch generieren |
+| **Lineage** | Abhaengigkeiten aus `manifest.json` inspizieren |
+
+**Funktionen die dbt Cloud voraussetzen** (nicht in dieser Demo verfuegbar):
+Discovery API (Model Health, Semantic Search), Semantic Layer (Metriken), Admin API (Job-Management), `text_to_sql`.
+
+**Setup (optional):**
+```bash
+# Python >= 3.12 erforderlich
+pip install dbt-mcp
+
+# In Claude Desktop config (~/.claude/claude_desktop_config.json):
+{
+  "mcpServers": {
+    "dbt": {
+      "command": "uvx",
+      "args": ["dbt-mcp"],
+      "env": {
+        "DBT_PROJECT_DIR": "/pfad/zu/new_env/dbt_project",
+        "DBT_MCP_ENABLE_DBT_CLI": "true",
+        "DBT_MCP_ENABLE_DBT_CODEGEN": "true"
+      }
+    }
+  }
+}
+```
+
+> **Hinweis:** dbt-MCP erlaubt KI-Assistenten, dbt-Befehle auszufuehren die Datenbank-Objekte veraendern koennen. In einer Demo-Umgebung ist das unkritisch, in Produktionsumgebungen sollte man die aktivierten Tool-Kategorien sorgfaeltig einschraenken.
