@@ -486,7 +486,29 @@ Die DAGs `dbt_classic` und `dbt_cosmos` verwenden **bewusst kein** `--full-refre
 | **dbt tags + selectors** | Raw Vault Modelle taggen (`+tags: ["protected"]`) und Team-Konvention: `--full-refresh` nur mit explizitem `--exclude tag:protected`. | Niedrig |
 | **Monitoring** | Alert wenn die Zeilenanzahl eines Satellites sinkt (sollte monoton steigen). Umsetzbar mit `dbt_expectations.expect_table_row_count_to_be_between` und einem dynamischen Minimum aus der letzten Ausfuehrung. | Mittel |
 
-> **Fuer die Demo-Umgebung** reicht `full_refresh: false` in Kombination mit dem `init_raw_data` DAG fuer einen sauberen Reset. In Produktionsumgebungen empfehlen wir mindestens zusaetzlich Postgres-Permissions und Monitoring.
+#### 4. Architektonischer Schutz: Vorgeschaltete PSA
+
+Die staerkste Variante ist **architektonischer Schutz** durch eine vorgeschaltete **Persistent Staging Area (PSA)**. Statt die Historisierung nur im Data Vault zu halten (wo sie von `--full-refresh` bedroht ist), wird sie in einer separaten, von dbt unabhaengigen Schicht verwaltet:
+
+```
+OHNE PSA:   CSV → Raw → Data Vault (Historisierung HIER, verwundbar)
+MIT PSA:    CSV → Raw → PSA (Historisierung HIER, stabil) → Data Vault (rebuild-faehig)
+```
+
+**Wie das funktioniert:**
+- Die PSA wird durch Stored Procedures (z.B. aus einem Code-Generator) verwaltet, nicht durch dbt
+- SCD2-Historisierung, Content-Hashing und Delete Detection passieren in der PSA
+- dbt liest aus der PSA (`source('psa', 'v_customers_cur')`) und baut den Data Vault daraus auf
+- Der Data Vault wird zur **deterministischen Funktion der PSA** — jederzeit neu generierbar
+
+**Warum das schuetzt:**
+- `dbt run --full-refresh` auf den Vault? Kein Problem — Rebuild aus PSA, kein Datenverlust
+- Modellumbau im Data Vault? PSA bleibt unangetastet, neues Modell wird aus derselben Datenbasis gebaut
+- Bug in einer Transformation? PSA-Daten sind korrekt, Core wird idempotent neu aufgebaut
+
+Diese Demo enthaelt einen optionalen PSA-Pfad (DAGs `psa_flow` und `psa_rebuild_demo`), der genau dieses Konzept demonstriert. Siehe [PSA-Pfad mit NG Generator](#psa-pfad-mit-ng-generator-optionaler-alternativer-datenfluss) fuer Details.
+
+> **Zusammenfassung:** Fuer die Demo-Umgebung reicht `full_refresh: false` als Minimalschutz. In Produktionsumgebungen empfehlen wir eine vorgeschaltete PSA als architektonischen Schutz, ergaenzt durch Postgres-Permissions und Monitoring.
 
 ---
 
