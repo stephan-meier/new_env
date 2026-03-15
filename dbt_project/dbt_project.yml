@@ -27,6 +27,7 @@ models:
     raw_vault:
       +schema: raw_vault
       +materialized: incremental
+      +full_refresh: false
       pit:
         +materialized: table
       bridges:

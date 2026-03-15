@@ -443,6 +443,53 @@ Die gesamte Umgebung laeuft in Docker-Containern und ist plattformunabhaengig. *
 
 ---
 
+## Schutz historischer Daten im Data Vault
+
+### Das Problem
+
+In einem Data Vault speichern Satellites die **komplette Aenderungshistorie** jeder Entitaet. Diese Historisierung ist der Kernwert des Modells - einmal verloren, ist sie nicht aus den Quelldaten rekonstruierbar (die Quellsysteme halten typischerweise nur den aktuellen Stand).
+
+**Gefahr:** Ein versehentliches `dbt run --full-refresh` auf den Raw Vault Modellen wuerde alle Satellite-Tabellen droppen und neu aufbauen - nur mit den aktuellen Daten aus Staging. Die gesamte Historie waere unwiderruflich verloren.
+
+In klassischen dbt-Projekten (ohne Data Vault) nutzt man `dbt snapshot` fuer SCD2-Historisierung. Snapshots haben einen eingebauten Schutzmechanismus: Sie sind als eigenstaendiger Befehl (`dbt snapshot`) von `dbt run` getrennt. Bei AutomateDV sind die Satellites jedoch normale `incremental`-Modelle, die ueber `dbt run` gesteuert werden - und damit anfaellig fuer `--full-refresh`.
+
+### Schutzmechanismen in dieser Demo
+
+#### 1. `full_refresh: false` (aktiv)
+
+In `dbt_project.yml` ist fuer alle Raw Vault Modelle `full_refresh: false` konfiguriert:
+
+```yaml
+raw_vault:
+  +materialized: incremental
+  +full_refresh: false   # Blockiert --full-refresh komplett
+```
+
+**Effekt:** Wenn jemand `dbt run --full-refresh` ausfuehrt, werden Raw Vault Modelle **uebersprungen** statt neu aufgebaut. dbt gibt eine Warnung aus:
+```
+Refusing to full-refresh model 'hub_customer' because full_refresh is set to false.
+```
+
+Das ist der staerkste dbt-native Schutz und seit dbt 1.6 verfuegbar.
+
+#### 2. Airflow DAGs ohne --full-refresh
+
+Die DAGs `dbt_classic` und `dbt_cosmos` verwenden **bewusst kein** `--full-refresh` Flag auf den Raw Vault Modellen. Der `load_delta` DAG nutzt `dbt run` (ohne Flag), damit AutomateDVs eingebaute Incremental-Logik greift.
+
+#### 3. Weitere Mitigationen (fuer Produktionsumgebungen)
+
+| Massnahme | Beschreibung | Aufwand |
+|-----------|-------------|---------|
+| **Postgres-Permissions** | `REVOKE TRUNCATE, DROP ON ALL TABLES IN SCHEMA raw_vault FROM dbt_user` - der dbt-User darf nur INSERT/UPDATE. Ein separater Admin-User behaelt DROP-Rechte. | Mittel |
+| **Backup vor Full-Refresh** | Pre-Hook in dbt der vor jedem Full-Refresh ein `pg_dump` des raw_vault Schemas erstellt. | Mittel |
+| **CI/CD Guard** | In der CI-Pipeline pruefen ob ein PR `--full-refresh` auf Raw Vault Modelle anwendet und den Build blockieren. | Niedrig |
+| **dbt tags + selectors** | Raw Vault Modelle taggen (`+tags: ["protected"]`) und Team-Konvention: `--full-refresh` nur mit explizitem `--exclude tag:protected`. | Niedrig |
+| **Monitoring** | Alert wenn die Zeilenanzahl eines Satellites sinkt (sollte monoton steigen). Umsetzbar mit `dbt_expectations.expect_table_row_count_to_be_between` und einem dynamischen Minimum aus der letzten Ausfuehrung. | Mittel |
+
+> **Fuer die Demo-Umgebung** reicht `full_refresh: false` in Kombination mit dem `init_raw_data` DAG fuer einen sauberen Reset. In Produktionsumgebungen empfehlen wir mindestens zusaetzlich Postgres-Permissions und Monitoring.
+
+---
+
 ## Bekannte Einschraenkungen
 
 - **AutomateDV Bridge + Effectivity Satellite**: Beide Macros sind in AutomateDV deprecated und wurden aus dem Projekt entfernt. Siehe [GitHub Issue](https://github.com/Datavault-UK/automate-dv/blob/master/macros/tables/postgres/bridge.sql).
