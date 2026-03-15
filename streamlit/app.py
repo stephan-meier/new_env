@@ -937,6 +937,12 @@ with tab_readme:
         # Fallback: im gemounteten Volume suchen
         readme_path = Path("/README.md")
     if readme_path.exists():
-        st.markdown(readme_path.read_text(encoding="utf-8"))
+        content = readme_path.read_text(encoding="utf-8")
+        # Streamlit hat ein Rendering-Limit fuer grosse Markdown-Bloecke.
+        # Daher splitten wir nach H2-Ueberschriften in einzelne Abschnitte.
+        sections = content.split("\n## ")
+        st.markdown(sections[0])  # Titel + erster Abschnitt
+        for section in sections[1:]:
+            st.markdown("## " + section)
     else:
         st.warning("README.md nicht gefunden. Bitte sicherstellen, dass die Datei im Projekt-Root liegt.")
