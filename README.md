@@ -543,3 +543,35 @@ pip install dbt-mcp
 ```
 
 > **Hinweis:** dbt-MCP erlaubt KI-Assistenten, dbt-Befehle auszufuehren die Datenbank-Objekte veraendern koennen. In einer Demo-Umgebung ist das unkritisch, in Produktionsumgebungen sollte man die aktivierten Tool-Kategorien sorgfaeltig einschraenken.
+
+### PSA-Pfad mit NG Generator (optionaler alternativer Datenfluss)
+
+Die Demo enthaelt einen optionalen zweiten Pfad, der eine **Persistent Staging Area (PSA)** als stabile, historisierte Grundlage vor dbt einschiebt. Die PSA wird durch einen metadatengetriebenen Code-Generator ("NG Generator") erzeugt.
+
+**Architektur-Vergleich:**
+```
+KLASSISCH:  CSV -> Raw -> Staging (dbt) -> Raw Vault (dbt) -> Marts
+PSA-PFAD:   CSV -> Raw -> PSA (NG Gen) -> Staging (dbt) -> Raw Vault (dbt)
+                          stabil!
+```
+
+**Kernvorteil:** Der Data Vault kann jederzeit aus der PSA komplett neu aufgebaut werden, ohne auf die Quelldaten (CSV) zurueckgreifen zu muessen. Die PSA schuetzt die historischen Daten **architektonisch** (nicht nur konfigurativ via `full_refresh: false`).
+
+**PSA-Objekte (Schema `psa`, am Beispiel `customers`):**
+
+| Objekt | Typ | Zweck |
+|--------|-----|-------|
+| `v_customers_ifc` | View | Interface-Abbild der Quelle mit Typ-Casting |
+| `v_customers_cln` | View | Dedupliziert + Content-Hash (sha256) |
+| `customers_psa` | Tabelle | SCD2-historisiert (ng_valid_from/to, ng_is_current) |
+| `v_customers_cur` | View | Nur aktuelle, nicht geloeschte Version |
+| `v_customers_fhi` | View | Alle Versionen (Full History) |
+| `run_customers_psa_load()` | Procedure | SCD2-Load via Hash-Vergleich |
+| `run_customers_delete_detection()` | Procedure | Markiert geloeschte Records |
+
+**Demo-Ablauf:**
+1. `init_raw_data` ausfuehren (CSV-Daten laden)
+2. `dbt_classic` ausfuehren (klassischer Pfad zum Vergleich)
+3. `psa_flow` ausfuehren (PSA aufbauen + Data Vault aus PSA)
+4. Im Streamlit-Tab "PSA-Pfad" die Ergebnisse vergleichen
+5. `psa_rebuild_demo` ausfuehren → beweist Vault-Rebuild aus PSA ohne CSV

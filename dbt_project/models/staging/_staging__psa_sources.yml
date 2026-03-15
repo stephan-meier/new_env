@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: psa
+    description: "PSA (Persistent Staging Area) - historisiert via NG Generator"
+    schema: psa
+    tables:
+      - name: v_customers_cur
+        description: "Aktuelle Kundenversion aus der PSA (ng_is_current = 1)"

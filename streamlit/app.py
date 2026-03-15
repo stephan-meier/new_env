@@ -19,8 +19,8 @@ def get_connection():
     )
 
 # --- Navigation ---
-tab_portal, tab_quality, tab_incremental, tab_devtips, tab_readme = st.tabs(
-    ["Portal", "Datenqualitaet", "Inkrementelle Loads", "Entwickler-Tipps", "Dokumentation"]
+tab_portal, tab_quality, tab_incremental, tab_psa, tab_devtips, tab_readme = st.tabs(
+    ["Portal", "Datenqualitaet", "Inkrementelle Loads", "PSA-Pfad (NG Generator)", "Entwickler-Tipps", "Dokumentation"]
 )
 
 # ==================== TAB: PORTAL ====================
@@ -463,6 +463,185 @@ with tab_incremental:
     4. **`load_delta`** triggern → laedt Batch 2 (Delta) + inkrementeller dbt run
     5. **Vault-Status erneut pruefen** → Satellites sind gewachsen, Hubs nur minimal
     6. **Historisierung** unten pruefen → Kunden 1+2 haben je 2 Versionen
+    """)
+
+# ==================== TAB: PSA-PFAD (NG GENERATOR) ====================
+with tab_psa:
+    st.title("PSA-Pfad (NG Generator)")
+    st.markdown("Optionaler alternativer Datenfluss mit einer **Persistent Staging Area** als stabile Grundlage.")
+    st.divider()
+
+    # --- Architektur-Vergleich ---
+    st.subheader("Architektur-Vergleich")
+    col_classic, col_psa = st.columns(2)
+    with col_classic:
+        st.markdown("**Klassischer Pfad**")
+        st.code(
+            "CSV -> Raw (COPY)\n"
+            "  -> Staging (dbt Views, Hash-Keys)\n"
+            "  -> Raw Vault (dbt incremental)\n"
+            "  -> Marts (dbt table)\n"
+            "\n"
+            "Historisierung: erst im Data Vault\n"
+            "Schutz: full_refresh: false (konfigurativ)",
+            language=None,
+        )
+    with col_psa:
+        st.markdown("**PSA-Pfad (NG Generator)**")
+        st.code(
+            "CSV -> Raw (COPY)\n"
+            "  -> PSA (NG Gen: SCD2, Delete Detection)\n"
+            "  -> Staging (dbt Views, Hash-Keys)\n"
+            "  -> Raw Vault (dbt incremental)\n"
+            "  -> Marts (dbt table)\n"
+            "\n"
+            "Historisierung: bereits in der PSA!\n"
+            "Schutz: architektonisch (PSA unabhaengig von dbt)",
+            language=None,
+        )
+
+    st.success(
+        "**Kernvorteil:** Die PSA ist eine stabile, historisierte Grundlage. "
+        "Der Data Vault kann jederzeit aus der PSA neu aufgebaut werden - "
+        "ohne Zurueckgreifen auf die Quelldaten (CSV). "
+        "Das ist architektonischer Schutz statt nur Konfiguration."
+    )
+
+    st.divider()
+
+    # --- PSA-Status ---
+    st.subheader("PSA-Status")
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+
+        # Pruefen ob PSA-Tabelle existiert
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'psa' AND table_name = 'customers_psa'
+            )
+        """)
+        psa_exists = cur.fetchone()[0]
+
+        if psa_exists:
+            cur.execute("SELECT count(*) FROM psa.customers_psa")
+            psa_total = cur.fetchone()[0]
+            cur.execute("SELECT count(*) FROM psa.v_customers_cur")
+            psa_current = cur.fetchone()[0]
+            cur.execute("SELECT count(*) FROM psa.v_customers_del")
+            psa_deleted = cur.fetchone()[0]
+            psa_versions = psa_total - psa_current - psa_deleted
+
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("PSA Gesamt", psa_total)
+            col2.metric("Aktuelle Versionen", psa_current)
+            col3.metric("Historische Versionen", psa_versions)
+            col4.metric("Geloeschte Records", psa_deleted)
+
+            # Side-by-Side Vergleich mit klassischem Pfad
+            st.divider()
+            st.subheader("Side-by-Side: Klassisch vs. PSA-Pfad")
+
+            comparison_data = []
+            for tbl in ["hub_customer", "sat_customer"]:
+                try:
+                    cur.execute(f"SELECT count(*) FROM raw_vault.{tbl}")
+                    classic_count = cur.fetchone()[0]
+                except Exception:
+                    classic_count = "n/a"
+                try:
+                    cur.execute(f"SELECT count(*) FROM raw_vault.{tbl}_psa")
+                    psa_count = cur.fetchone()[0]
+                except Exception:
+                    psa_count = "n/a"
+                comparison_data.append({
+                    "Tabelle": tbl,
+                    "Klassisch (raw_vault)": classic_count,
+                    "PSA-Pfad (raw_vault)": psa_count,
+                    "Match": "Ja" if classic_count == psa_count else "Nein"
+                })
+
+            st.dataframe(
+                pd.DataFrame(comparison_data),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # PSA-Historien-Viewer
+            st.divider()
+            st.subheader("PSA-Historien-Viewer (SCD2)")
+            st.markdown("Zeigt alle Versionen eines Kunden in der PSA:")
+
+            cur.execute("""
+                SELECT id, last_name, first_name, email, city,
+                       ng_valid_from, ng_valid_to, ng_is_current, ng_is_deleted,
+                       ng_rowhash
+                FROM psa.customers_psa
+                ORDER BY id, ng_valid_from
+                LIMIT 50
+            """)
+            cols = [desc[0] for desc in cur.description]
+            rows = cur.fetchall()
+            if rows:
+                df_hist = pd.DataFrame(rows, columns=cols)
+                st.dataframe(df_hist, use_container_width=True, hide_index=True)
+            else:
+                st.info("Keine Daten in der PSA. Bitte zuerst den DAG 'psa_flow' ausfuehren.")
+
+        else:
+            st.warning(
+                "PSA noch nicht initialisiert. Bitte folgende Schritte ausfuehren:\n\n"
+                "1. DAG `init_raw_data` triggern (Rohdaten laden)\n"
+                "2. DAG `psa_flow` triggern (PSA aufbauen)"
+            )
+
+        conn.close()
+    except Exception as e:
+        st.error(f"Datenbankfehler: {e}")
+
+    st.divider()
+
+    # --- Demo-Workflow ---
+    st.subheader("Demo-Workflow")
+    st.markdown("""
+    **Schritt 1:** DAG `init_raw_data` ausfuehren (CSV-Daten in Raw laden)
+
+    **Schritt 2:** DAG `dbt_classic` ausfuehren (klassischer Pfad aufbauen)
+
+    **Schritt 3:** DAG `psa_flow` ausfuehren (PSA-Pfad aufbauen)
+
+    **Schritt 4:** In diesem Tab die Ergebnisse vergleichen:
+    - Gleiche Zeilenzahlen in Hub/Satellite = PSA-Pfad produziert identisches Ergebnis
+    - PSA hat zusaetzlich: SCD2-History, Delete Detection, Content-Hash
+
+    **Schritt 5 (Highlight):** DAG `psa_rebuild_demo` ausfuehren:
+    - Droppt die PSA-Vault-Tabellen (hub_customer_psa, sat_customer_psa)
+    - Baut sie aus der PSA neu auf (dbt run --full-refresh)
+    - Beweist: **kein Datenverlust**, kein Zurueckgreifen auf CSV noetig
+    """)
+
+    st.divider()
+
+    # --- NG Generator Konzept ---
+    st.subheader("NG Generator - Konzept")
+    st.markdown("""
+    Der **NG Generator** ist ein metadatengetriebener Code-Generator, der aus
+    Tabellendefinitionen (YAML) und Jinja-Templates den kompletten PSA-Code erzeugt:
+
+    | Objekt | Typ | Zweck |
+    |--------|-----|-------|
+    | `v_customers_ifc` | View | Interface: 1:1 Abbild der Quelle mit Typ-Casting |
+    | `v_customers_cln` | View | Clean: Dedup + Content-Hash (sha256) |
+    | `customers_psa` | Tabelle | PSA: SCD2-historisiert (ng_valid_from/to) |
+    | `v_customers_cur` | View | Aktuelle Version (ng_is_current = 1) |
+    | `v_customers_fhi` | View | Full History (alle Versionen) |
+    | `v_customers_del` | View | Geloeschte Records |
+    | `run_customers_psa_load()` | Procedure | SCD2-Load via Content-Hash-Vergleich |
+    | `run_customers_delete_detection()` | Procedure | Markiert fehlende Records als geloescht |
+
+    **Vorteil der Codegenerierung:** Alle Tabellen folgen demselben Muster.
+    Fuer 100 Quellen aendert sich nur die YAML-Metadaten-Datei, nicht der Code.
     """)
 
 # ==================== TAB: ENTWICKLER-TIPPS ====================
