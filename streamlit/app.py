@@ -180,6 +180,84 @@ with tab_quality:
     # --- run_results.json parsen ---
     RUN_RESULTS_PATH = Path("/usr/app/dbt/target/run_results.json")
 
+    def _readable_test_name(uid):
+        """Erzeugt einen lesbaren Testnamen aus der unique_id."""
+        # unique_id Beispiele:
+        #   test.northwind_vault.not_null_stg_customers_customer_hk.abc123
+        #   test.northwind_vault.dbt_expectations_expect_column_values_to_be_between_stg_orders_shipping_fee_0_100.def456
+        parts = uid.split(".")
+        # Der vorletzte Teil ist der eigentliche Testname (ohne Hash)
+        raw_name = parts[2] if len(parts) > 2 else parts[-1]
+
+        # Hash-Suffix entfernen (letzte 8-12 hex chars nach dem letzten Punkt)
+        # In unique_id ist der Hash der letzte Teil nach dem letzten Punkt
+        # raw_name selbst hat keinen Hash mehr, der ist in parts[-1]
+
+        # dbt-expectations: Praefix kuerzen
+        if raw_name.startswith("dbt_expectations_"):
+            raw_name = raw_name[len("dbt_expectations_"):]
+
+        # Bekannte Test-Praefixe lesbarer machen
+        readable_prefixes = {
+            "expect_column_pair_values_a_to_be_greater_than_b": "Spalte A >= Spalte B",
+            "expect_column_values_to_match_regex": "Regex-Pruefung",
+            "expect_column_values_to_be_between": "Wertebereich",
+            "expect_column_distinct_count_to_equal": "Anzahl Distinct-Werte",
+            "expect_column_proportion_of_unique_values_to_be_between": "Anteil Unique-Werte",
+            "expect_compound_columns_to_be_unique": "Kombination eindeutig",
+            "expect_row_values_to_have_recent_data": "Aktuelle Daten vorhanden",
+            "expect_table_row_count_to_be_between": "Zeilenanzahl plausibel",
+        }
+
+        for prefix, label in readable_prefixes.items():
+            if prefix in raw_name:
+                # Modellname extrahieren (nach dem Praefix)
+                rest = raw_name.split(prefix)[-1].strip("_")
+                # Unterstrich-Kette in lesbaren Modellnamen
+                model = rest.split("_")[0:3]  # z.B. stg_orders_shipping
+                model_str = ".".join(model) if model else ""
+                return f"{label} ({model_str})" if model_str else label
+
+        # Standard-Tests: not_null, unique etc.
+        if raw_name.startswith("not_null_"):
+            col_info = raw_name[len("not_null_"):]
+            return f"NOT NULL: {col_info}"
+        if raw_name.startswith("unique_"):
+            col_info = raw_name[len("unique_"):]
+            return f"UNIQUE: {col_info}"
+        if raw_name.startswith("accepted_values_"):
+            col_info = raw_name[len("accepted_values_"):]
+            return f"Erlaubte Werte: {col_info}"
+        if raw_name.startswith("relationships_"):
+            col_info = raw_name[len("relationships_"):]
+            return f"Referenz: {col_info}"
+
+        return raw_name
+
+    def _get_model_name(uid):
+        """Extrahiert den Modellnamen aus der unique_id."""
+        parts = uid.split(".")
+        if len(parts) > 2:
+            name = parts[2]
+            # Aus Testnamen das Modell ableiten (z.B. not_null_stg_customers_hk -> stg_customers)
+            for prefix in ["not_null_", "unique_", "accepted_values_", "relationships_"]:
+                if name.startswith(prefix):
+                    rest = name[len(prefix):]
+                    # stg_customers_customer_hk -> stg_customers
+                    for p in ["stg_", "hub_", "sat_", "lnk_", "pit_", "mart_"]:
+                        if p in rest:
+                            idx = rest.index(p)
+                            model_parts = rest[idx:].split("_")
+                            return "_".join(model_parts[:2])
+                    return rest
+            # dbt-expectations: Modellname ist nach dem expect-Typ
+            for p in ["stg_", "hub_", "sat_", "lnk_", "pit_", "mart_"]:
+                if p in name:
+                    idx = name.index(p)
+                    model_parts = name[idx:].split("_")
+                    return "_".join(model_parts[:2])
+        return ""
+
     def load_run_results():
         if not RUN_RESULTS_PATH.exists():
             return None, None
@@ -188,11 +266,9 @@ with tab_quality:
         rows = []
         for r in data.get("results", []):
             uid = r.get("unique_id", "")
-            # Test-Name aus unique_id extrahieren
-            test_name = uid.split(".")[-1] if "." in uid else uid
-            # Modell-Name aus unique_id ableiten
-            parts = uid.split(".")
-            short_name = parts[2] if len(parts) > 2 else test_name
+            # NUR Tests anzeigen, keine Model-Runs
+            if not uid.startswith("test."):
+                continue
             # Schicht bestimmen
             if "stg_" in uid:
                 layer = "Staging"
@@ -205,10 +281,14 @@ with tab_quality:
             # dbt-expectations vs. Standard
             is_expectation = "dbt_expectations" in uid
             test_type = "dbt-expectations" if is_expectation else "Standard"
+            # Lesbarer Name + Modell
+            readable_name = _readable_test_name(uid)
+            model_name = _get_model_name(uid)
             rows.append({
                 "Schicht": layer,
+                "Modell": model_name,
                 "Typ": test_type,
-                "Test": short_name,
+                "Test": readable_name,
                 "Status": r.get("status", "unknown"),
                 "Fehler": r.get("failures", 0) or 0,
                 "Laufzeit (s)": round(r.get("execution_time", 0), 3),
@@ -218,25 +298,68 @@ with tab_quality:
         ts = data.get("metadata", {}).get("generated_at", "")
         return df, ts
 
+    # --- Freshness aus sources.json parsen ---
+    SOURCES_PATH = Path("/usr/app/dbt/target/sources.json")
+
+    def load_freshness_results():
+        if not SOURCES_PATH.exists():
+            return None
+        with open(SOURCES_PATH) as f:
+            data = json.load(f)
+        rows = []
+        for r in data.get("results", []):
+            uid = r.get("unique_id", "")
+            source_name = uid.split(".")[-1] if "." in uid else uid
+            age_seconds = r.get("max_loaded_at_time_ago_in_s")
+            if age_seconds is not None:
+                hours = age_seconds / 3600
+                if hours < 1:
+                    age_str = f"{int(age_seconds / 60)} Min"
+                elif hours < 48:
+                    age_str = f"{hours:.1f} Std"
+                else:
+                    age_str = f"{hours / 24:.1f} Tage"
+            else:
+                age_str = "n/a"
+            criteria = r.get("criteria", {})
+            warn_h = criteria.get("warn_after", {}).get("count", "")
+            error_h = criteria.get("error_after", {}).get("count", "")
+            rows.append({
+                "Source": source_name,
+                "Status": r.get("status", "unknown"),
+                "Alter": age_str,
+                "Warn-Schwelle": f"{warn_h}h" if warn_h else "",
+                "Error-Schwelle": f"{error_h}h" if error_h else "",
+            })
+        return pd.DataFrame(rows) if rows else None
+
     if st.button("Ergebnisse neu laden", key="refresh_quality"):
         st.cache_data.clear()
 
     results_df, generated_at = load_run_results()
+    freshness_df = load_freshness_results()
 
     if results_df is not None and not results_df.empty:
         # --- Zusammenfassung mit Metriken ---
         if generated_at:
-            st.caption(f"Letzter Lauf: {generated_at}")
+            st.caption(f"Letzter dbt test Lauf: {generated_at}")
 
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         total = len(results_df)
-        passed = len(results_df[results_df["Status"] == "pass"])
+        passed = len(results_df[results_df["Status"].isin(["pass", "success"])])
         warned = len(results_df[results_df["Status"] == "warn"])
         failed = len(results_df[results_df["Status"].isin(["fail", "error"])])
         col_m1.metric("Tests gesamt", total)
         col_m2.metric("Bestanden", passed)
         col_m3.metric("Warnungen", warned)
         col_m4.metric("Fehler", failed)
+
+        # --- Freshness-Ergebnisse ---
+        if freshness_df is not None and not freshness_df.empty:
+            st.divider()
+            st.subheader("Source Freshness (PSA)")
+            st.caption("Ergebnisse von `dbt source freshness` - prueft ob Quelldaten aktuell sind")
+            st.dataframe(freshness_df, hide_index=True, use_container_width=True)
 
         st.divider()
 

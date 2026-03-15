@@ -51,4 +51,9 @@ with DAG(
         bash_command=f"{DBT_CMD} test --store-failures --profiles-dir {DBT_DIR}",
     )
 
-    dbt_deps >> dbt_seed >> dbt_run_staging >> dbt_run_raw_vault >> dbt_run_marts >> dbt_test
+    dbt_freshness = BashOperator(
+        task_id="dbt_freshness",
+        bash_command=f"{DBT_CMD} source freshness --profiles-dir {DBT_DIR} || true",
+    )
+
+    dbt_deps >> dbt_seed >> dbt_run_staging >> dbt_run_raw_vault >> dbt_run_marts >> dbt_test >> dbt_freshness
