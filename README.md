@@ -512,6 +512,147 @@ Diese Demo enthaelt einen optionalen PSA-Pfad (DAGs `psa_flow` und `psa_rebuild_
 
 ---
 
+## DAG-Splitting-Strategie fuer Produktion
+
+In einer Produktionsumgebung reicht ein einzelner dbt-DAG nicht aus. Verschiedene Quellen, Fachbereiche und Konsumenten haben unterschiedliche Ladezeiten, Abhaengigkeiten und Verantwortlichkeiten. Hier ist die empfohlene Strategie:
+
+### Prinzip: Tags als zentraler Steuerungsmechanismus
+
+dbt-Tags auf Modell-Ebene definieren die fachliche Zugehoerigkeit. Einmal definiert, koennen sie ueberall verwendet werden - in Cosmos DAGs, dbt selectors und CI/CD:
+
+```yaml
+# dbt_project.yml
+models:
+  northwind_vault:
+    raw_vault:
+      crm:
+        +tags: ["domain_crm"]
+      logistics:
+        +tags: ["domain_logistics"]
+    marts:
+      sales:
+        +tags: ["consumption_sales"]
+      controlling:
+        +tags: ["consumption_controlling"]
+```
+
+### Empfohlene DAG-Struktur
+
+```
+PSA (pro Quelle)                    dbt/Cosmos (pro Domain)           Consumption
+┌─────────────┐                    ┌──────────────────────┐      ┌─────────────────┐
+│ psa_crm     │──┐                 │ dv_crm               │──┐   │ cons_sales      │
+│ @02:00      │  │  Dataset/       │ @03:00 oder Dataset  │  │   │ @06:00          │
+└─────────────┘  │  Sensor         │ Tag: domain_crm      │  │   │ Tag: cons_sales │
+┌─────────────┐  ├────────────────>│                      │  ├──>│                 │
+│ psa_erp     │──┘                 └──────────────────────┘  │   └─────────────────┘
+│ @02:00      │──┐                 ┌──────────────────────┐  │   ┌─────────────────┐
+└─────────────┘  ├────────────────>│ dv_logistics         │──┘   │ cons_ctrl       │
+┌─────────────┐  │                 │ @04:00 oder Dataset  │──┐   │ @06:30          │
+│ psa_wms     │──┘                 │ Tag: domain_logistics│  ├──>│                 │
+│ @02:30      │                    └──────────────────────┘  │   └─────────────────┘
+└─────────────┘                    ┌──────────────────────┐  │
+                                   │ dv_nightly_full      │──┘
+                                   │ @So 01:00 (weekly)   │
+                                   │ Alles, full rebuild  │
+                                   └──────────────────────┘
+```
+
+**Drei Schichten, drei Verantwortlichkeiten:**
+
+| Schicht | Splitting | Schedule | Trigger |
+|---------|-----------|----------|---------|
+| **PSA** (NG Generator) | Pro Quelle | Zeitgesteuert | Unabhaengig |
+| **Core/Vault** (dbt/Cosmos) | Pro fachliche Domain | Nach PSA | Dataset oder Sensor |
+| **Consumption** (dbt/Cosmos) | Pro Konsument/Bereich | Nach Core | Dataset oder zeitversetzt |
+
+### Cosmos: Mehrere DAGs mit Tag-Selektion
+
+Pro Domain ein eigener Cosmos-DAG mit `select`:
+
+```python
+# dag_dv_crm.py
+DbtDag(
+    dag_id="dv_crm",
+    schedule="0 3 * * *",
+    render_config=RenderConfig(
+        select=["tag:domain_crm"],
+    ),
+    ...
+)
+```
+
+### Cosmos: DbtTaskGroup fuer Sub-Graphs
+
+Falls mehrere Domains in einem DAG mit expliziter Reihenfolge laufen sollen:
+
+```python
+with DAG("dv_nightly") as dag:
+    psa_done = ExternalTaskSensor(task_id="wait_psa", ...)
+
+    with DbtTaskGroup(group_id="crm",
+         select=["tag:domain_crm"], ...) as crm:
+        pass
+    with DbtTaskGroup(group_id="logistics",
+         select=["tag:domain_logistics"], ...) as logistics:
+        pass
+    with DbtTaskGroup(group_id="sales",
+         select=["tag:consumption_sales"], ...) as sales:
+        pass
+
+    psa_done >> [crm, logistics] >> sales
+```
+
+### Cross-DAG Dependencies: PSA triggert dbt
+
+**Variante A - Airflow Datasets (empfohlen fuer Airflow 3):**
+```python
+# PSA-DAG publiziert Dataset nach erfolgreichem Load:
+psa_dataset = Dataset("psa://crm_loaded")
+
+@task(outlets=[psa_dataset])
+def mark_psa_done(): pass
+
+# dbt-DAG wird automatisch getriggert:
+DbtDag(
+    dag_id="dv_crm",
+    schedule=[psa_dataset],  # Startet wenn PSA fertig
+    ...
+)
+```
+
+**Variante B - ExternalTaskSensor (klassisch):**
+```python
+wait_for_psa = ExternalTaskSensor(
+    task_id="wait_psa",
+    external_dag_id="psa_flow",
+    external_task_id="load_customers",
+)
+wait_for_psa >> crm_task_group
+```
+
+### dbt Selectors fuer komplexe Auswahl
+
+Fuer fortgeschrittene Szenarien (z.B. nur inkrementelle Modelle einer Domain):
+
+```yaml
+# selectors.yml
+selectors:
+  - name: crm_incremental
+    definition:
+      intersection:
+        - method: tag
+          value: domain_crm
+        - method: config.materialized
+          value: incremental
+```
+
+Referenz in Cosmos: `select=["selector:crm_incremental"]`
+
+> **Zusammenfassung:** Tags auf den dbt-Modellen sind die Grundlage. Darauf aufbauend erstellt man pro Fachbereich einen eigenen Cosmos-DAG (oder DbtTaskGroup). Cross-DAG-Abhaengigkeiten (PSA → Core → Consumption) werden ueber Airflow Datasets oder ExternalTaskSensors gesteuert. Ein woechentlicher Full-Rebuild-DAG sichert die Gesamtkonsistenz.
+
+---
+
 ## Bekannte Einschraenkungen
 
 - **AutomateDV Bridge + Effectivity Satellite**: Beide Macros sind in AutomateDV deprecated und wurden aus dem Projekt entfernt. Siehe [GitHub Issue](https://github.com/Datavault-UK/automate-dv/blob/master/macros/tables/postgres/bridge.sql).
