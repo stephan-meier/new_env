@@ -649,7 +649,61 @@ selectors:
 
 Referenz in Cosmos: `select=["selector:crm_incremental"]`
 
-> **Zusammenfassung:** Tags auf den dbt-Modellen sind die Grundlage. Darauf aufbauend erstellt man pro Fachbereich einen eigenen Cosmos-DAG (oder DbtTaskGroup). Cross-DAG-Abhaengigkeiten (PSA → Core → Consumption) werden ueber Airflow Datasets oder ExternalTaskSensors gesteuert. Ein woechentlicher Full-Rebuild-DAG sichert die Gesamtkonsistenz.
+### Konfiguration von Code trennen (Best Practice)
+
+In der Praxis werden DAGs betrieblich angepasst - Ladezeitpunkte verschieben sich, Abhaengigkeiten aendern sich, einzelne Modelle werden temporaer ausgeschlossen. Diese Anpassungen gehen verloren wenn DAG-Dateien ueber CI/CD redeployed oder regeneriert werden.
+
+**Das Problem:**
+
+| Anpassung | Wo gespeichert | Risiko bei Redeployment |
+|-----------|---------------|------------------------|
+| Schedule `0 3 * * *` → `0 3,15 * * *` | Hardcodiert im DAG-File | Ueberschrieben |
+| Zusaetzliche Sensor-Dependency | Hardcodiert im DAG-File | Ueberschrieben |
+| `exclude` fuer experimentelle Modelle | Hardcodiert im DAG-File | Ueberschrieben |
+| Airflow Variable `dv_crm_config` | Airflow-Datenbank | **Persistiert** |
+
+**Loesung: Betriebliche Parameter in Airflow Variables auslagern:**
+
+```python
+# dag_dv_crm.py - Code ist generierbar/wiederherstellbar
+from airflow.models import Variable
+import json
+
+config = json.loads(Variable.get("dv_crm_config", default_var='{}'))
+
+DbtDag(
+    dag_id="dv_crm",
+    schedule=config.get("schedule", "0 3 * * *"),       # Default im Code
+    render_config=RenderConfig(
+        select=config.get("select", ["tag:domain_crm"]),
+        exclude=config.get("exclude", []),
+    ),
+    ...
+)
+```
+
+**Konfiguration in der Airflow UI** (Admin → Variables):
+
+```json
+// Variable: dv_crm_config
+{
+  "schedule": "0 3,15 * * *",
+  "select": ["tag:domain_crm"],
+  "exclude": ["tag:experimental"],
+  "notes": "2x taeglich seit 2026-03-10, Ticket OPS-1234"
+}
+```
+
+**Vorteile dieses Patterns:**
+- **DAG-Code ist regenerierbar** - Git-Deployment ueberschreibt keine betrieblichen Anpassungen
+- **Aenderungen ohne Git-Commit** - Betrieb kann Schedules/Excludes sofort anpassen
+- **Audit-Trail** - Variable-Aenderungen werden in der Airflow-DB geloggt
+- **Defaults im Code** - Wenn keine Variable gesetzt ist, greifen sinnvolle Defaults
+- **Dokumentation im Wert** - Das `notes`-Feld erklaert warum eine Anpassung gemacht wurde
+
+> **Faustregel:** Alles was sich zwischen Deployments aendern kann (Schedules, Excludes, Timeouts, Retry-Counts) gehoert in Airflow Variables. Alles was sich nur bei Modell-Aenderungen aendert (Tags, Pfade, Projekt-Config) gehoert in den Code.
+
+> **Zusammenfassung:** Tags auf den dbt-Modellen sind die Grundlage. Darauf aufbauend erstellt man pro Fachbereich einen eigenen Cosmos-DAG (oder DbtTaskGroup). Cross-DAG-Abhaengigkeiten (PSA → Core → Consumption) werden ueber Airflow Datasets oder ExternalTaskSensors gesteuert. Betriebliche Anpassungen (Schedules, Excludes) werden in Airflow Variables ausgelagert, damit sie Redeployments ueberleben. Ein woechentlicher Full-Rebuild-DAG sichert die Gesamtkonsistenz.
 
 ---
 
