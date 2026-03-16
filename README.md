@@ -88,7 +88,7 @@ Beim ersten Start passiert automatisch:
 
 | Service | URL | Login |
 |---------|-----|-------|
-| **Streamlit Portal** | http://localhost:8501 | - |
+| **Streamlit Portal** | http://localhost:8572 | - |
 | **Airflow UI** | http://localhost:8080 | admin / admin |
 | **Flower** (Celery Monitor) | http://localhost:5555 | - |
 | **dbt Docs** | http://localhost:8081 | - |
@@ -188,7 +188,7 @@ Fuer einen sauberen Neustart einfach `init_raw_data` erneut triggern - der DAG m
 │  ┌──────────┐                                                     │
 │  │  Redis   │  ┌──────────┐ ┌─────────┐ ┌──────────┐             │
 │  │ (Broker) │  │ dbt Docs │ │ pgAdmin │ │Streamlit │             │
-│  └──────────┘  │  :8081   │ │  :5050  │ │  :8501   │             │
+│  └──────────┘  │  :8081   │ │  :5050  │ │  :8572   │             │
 │                └──────────┘ └─────────┘ └──────────┘             │
 └───────────────────────────────────────────────────────────────────┘
 

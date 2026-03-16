@@ -258,7 +258,7 @@ services:
       context: ./streamlit
       dockerfile: Dockerfile
     ports:
-      - "8501:8501"
+      - "8572:8501"
     volumes:
       - ./streamlit:/app
       - ./README.md:/README.md:ro
