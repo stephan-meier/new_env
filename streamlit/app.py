@@ -18,6 +18,9 @@ def get_connection():
         user="demo_user", password="demo_pass",
     )
 
+# --- Logo ---
+st.image("/app/logo/4094_Pistor AG.png", width=40)
+
 # --- Navigation ---
 tab_portal, tab_quality, tab_incremental, tab_psa, tab_devtips, tab_readme = st.tabs(
     ["Portal", "Datenqualitaet", "Inkrementelle Loads", "PSA-Pfad (NG Generator)", "Entwickler-Tipps", "Dokumentation"]
