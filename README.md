@@ -707,6 +707,395 @@ DbtDag(
 
 ---
 
+## Debugging und Run-Dokumentation
+
+### Das 3-Schichten-Problem
+
+In einer Architektur mit Code-Generator + dbt + AutomateDV durchlaeuft jedes SQL-Statement drei Generierungsschichten:
+
+```
+Schicht 1: Code-Generator    YAML-Metadaten + Jinja-Templates  ->  dbt .sql/.yml Dateien
+Schicht 2: dbt + AutomateDV  dbt-Jinja + AutomateDV Macros     ->  compiled SQL
+Schicht 3: PostgreSQL         Fuehrt das SQL aus                ->  Ergebnis / Fehler
+```
+
+Wenn ein Fehler auftritt, muss man zurueckverfolgen:
+- Ist das **generierte dbt-Modell** korrekt? (Schicht 1 → 2 Uebergang)
+- Ist das **compilierte SQL** korrekt? (Schicht 2 → 3 Uebergang)
+- Oder ist die **YAML-Metadaten-Definition** falsch? (Schicht 1 Eingang)
+
+### dbt Artefakte verstehen
+
+dbt schreibt bei jedem Lauf mehrere Artefakte in das `target/`-Verzeichnis:
+
+| Verzeichnis / Datei | Inhalt | Debugging-Nutzen |
+|---------------------|--------|-----------------|
+| `target/compiled/` | Reines SELECT nach Jinja-Aufloesung | "Was hat mein Jinja produziert?" |
+| `target/run/` | Vollstaendiges SQL inkl. DDL (`CREATE TABLE AS`, `MERGE`) | "Was hat Postgres tatsaechlich bekommen?" |
+| `manifest.json` | Kompletter Projekt-Graph inkl. `compiled_code` pro Node | Programmatisch auswertbar, enthaelt compiled SQL |
+| `run_results.json` | Status, Laufzeit, Fehler pro Node | Test-/Run-Ergebnisse |
+| `sources.json` | Freshness-Ergebnisse pro Source | Datenaktualitaet |
+| `catalog.json` | Warehouse-Katalog (Spalten, Typen, Statistiken) | Fuer dbt Docs |
+
+**Wichtig:** Das `target/`-Verzeichnis wird bei **jedem** dbt-Lauf ueberschrieben. Fuer Audit-Zwecke muessen die Artefakte nach jedem Lauf archiviert werden (siehe unten).
+
+### Debugging-Workflow
+
+**1. Schicht isolieren:**
+
+```bash
+# Was hat der Code-Generator erzeugt? (Schicht 1 Output)
+cat dbt_project/models/raw_vault/hubs/hub_customer.sql
+
+# Was hat dbt daraus kompiliert? (Schicht 2 Output, reines SELECT)
+dbt compile --select hub_customer
+cat target/compiled/northwind_vault/models/raw_vault/hubs/hub_customer.sql
+
+# Was wurde tatsaechlich ausgefuehrt? (Schicht 3 Input, mit DDL)
+cat target/run/northwind_vault/models/raw_vault/hubs/hub_customer.sql
+```
+
+**2. SQL-Diff vor/nach Aenderungen:**
+
+```bash
+# Zustand VOR der Aenderung sichern:
+dbt compile
+cp -r target/compiled target/compiled_BEFORE
+
+# Code-Generator Config aendern, neu generieren, dann:
+dbt compile
+diff -r target/compiled_BEFORE target/compiled
+```
+
+Dieser Workflow ist besonders wertvoll bei AutomateDV-Konfigurationsaenderungen - man sieht exakt wie sich eine YAML-Aenderung auf das generierte SQL auswirkt.
+
+**3. Debug-Kommentare in Generator-Templates:**
+
+```sql
+-- NG_TEMPLATE: hub.sql.j2 v1.3
+-- NG_SOURCE: customers.yml
+-- NG_GENERATED: 2026-03-17T08:00:00
+{{ automate_dv.hub(src_pk=src_pk, ...) }}
+```
+
+Diese Kommentare ueberleben die dbt-Kompilierung und erscheinen im `target/compiled/` Output. So kann man bei einem Fehler sofort sehen, welches Template und welche Metadaten-Version den Code erzeugt haben.
+
+**4. Jinja-Logging fuer Runtime-Debugging:**
+
+```sql
+{%- set my_var = some_expression -%}
+{{ log("DEBUG my_var = " ~ my_var, info=True) }}
+```
+
+Gibt Werte waehrend der Kompilierung auf die Konsole aus, ohne das SQL zu beeinflussen.
+
+### Run-Dokumentation: Artefakte archivieren
+
+Das `target/`-Verzeichnis wird bei jedem Lauf ueberschrieben. Fuer eine lueckenlose Dokumentation muessen die Artefakte nach jedem Lauf archiviert werden.
+
+**Ansatz 1: Archiv-Task in Airflow (einfach)**
+
+```python
+archive = BashOperator(
+    task_id="archive_artifacts",
+    bash_command="""
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        mkdir -p /usr/app/dbt/artifact_archive/${TIMESTAMP}
+        cp /usr/app/dbt/target/manifest.json /usr/app/dbt/artifact_archive/${TIMESTAMP}/
+        cp /usr/app/dbt/target/run_results.json /usr/app/dbt/artifact_archive/${TIMESTAMP}/
+        cp -r /usr/app/dbt/target/compiled /usr/app/dbt/artifact_archive/${TIMESTAMP}/
+        cp -r /usr/app/dbt/target/run /usr/app/dbt/artifact_archive/${TIMESTAMP}/
+    """,
+    trigger_rule=TriggerRule.ALL_DONE,  # Laeuft IMMER, auch bei Fehlern
+)
+```
+
+**Ansatz 2: dbt-artifacts Package (Daten in Postgres)**
+
+```yaml
+# packages.yml
+packages:
+  - package: brooklyn-data/dbt_artifacts
+    version: [">=2.6.0", "<3.0.0"]
+
+# dbt_project.yml
+on-run-end:
+  - "{{ dbt_artifacts.upload_results(results) }}"
+```
+
+Schreibt Run-Resultate als Tabellen in die Datenbank. Damit sind historische Laufergebnisse per SQL abfragbar und koennen in Streamlit visualisiert werden.
+
+**Ansatz 3: Elementary (umfassende Reports)**
+
+```yaml
+# packages.yml
+packages:
+  - package: elementary-data/elementary
+    version: [">=0.15.0", "<1.0.0"]
+```
+
+Elementary generiert mit `edr report` ein **komplettes HTML-Dashboard** pro Run: Teststatus, Laufzeiten, Anomalie-Erkennung, Lineage. Der Befehl kann als Post-Run-Task in Airflow ausgefuehrt werden.
+
+### Immer-laufender Report-Task in Airflow
+
+Um einen Dokumentations-Task anzuhaengen der **unabhaengig vom Erfolg** der vorherigen Tasks laeuft, muss man von `DbtDag` auf `DbtTaskGroup` wechseln:
+
+```python
+from airflow.utils.trigger_rule import TriggerRule
+
+with DAG("dbt_cosmos_with_reporting") as dag:
+
+    dbt_tasks = DbtTaskGroup(
+        group_id="dbt_run",
+        ...
+    )
+
+    archive = BashOperator(
+        task_id="archive_artifacts",
+        bash_command="...",
+        trigger_rule=TriggerRule.ALL_DONE,  # Laeuft IMMER
+    )
+
+    report = PythonOperator(
+        task_id="generate_report",
+        python_callable=generate_run_report,
+        trigger_rule=TriggerRule.ALL_DONE,
+    )
+
+    dbt_tasks >> archive >> report
+```
+
+**Relevante Trigger Rules:**
+
+| Rule | Verhalten | Einsatz |
+|------|-----------|---------|
+| `all_success` | Nur wenn alle Upstream-Tasks erfolgreich (Default) | Normale Abhaengigkeiten |
+| `all_done` | Wenn alle Upstream-Tasks fertig (egal ob success/fail/skip) | Archivierung, Reports |
+| `one_failed` | Mindestens ein Upstream-Task fehlgeschlagen | Fruehe Alarmierung |
+| `none_failed` | Kein Upstream-Task fehlgeschlagen (skip erlaubt) | Bedingte Pfade |
+
+### Empfehlung je nach Reifegrad
+
+| Reifegrad | Loesung | Aufwand |
+|-----------|---------|---------|
+| **Einstieg** | `target/compiled/` manuell inspizieren + `dbt compile --select` | Kein Aufwand |
+| **Standard** | Archiv-Task in Airflow + Streamlit-Datenqualitaets-Tab (bereits vorhanden) | Niedrig |
+| **Fortgeschritten** | dbt-artifacts Package → Run-Historie in Postgres → Trend-Dashboards | Mittel |
+| **Enterprise** | Elementary + `edr report` → HTML-Reports pro Run + Slack-Benachrichtigung | Mittel-Hoch |
+
+---
+
+## Multi-Environment Deployment (DEV / INT / PROD)
+
+### Grundprinzip: Ein Branch, Environment per Variable
+
+Statt branch-per-environment (fuehrt zu Drift und Merge-Konflikten) wird empfohlen, einen einzigen `main`-Branch zu verwenden. Das Verhalten pro Umgebung wird durch Environment-Variablen gesteuert:
+
+```python
+# In jedem DAG:
+import os
+ENV = os.getenv("AIRFLOW_ENV", "dev")
+
+SCHEDULES = {
+    "dev": None,           # nur manuell
+    "int": "@daily",       # taeglich fuer Integrationstests
+    "prod": "0 6 * * *",   # 06:00 in Produktion
+}
+```
+
+### Dateistruktur fuer Multi-Environment
+
+```
+new_env/
+├── docker-compose.yml                  # Basis-Konfiguration (alle Umgebungen)
+├── environments/
+│   ├── dev/
+│   │   ├── .env                        # Secrets + AIRFLOW_ENV=dev
+│   │   └── docker-compose.override.yml # Dev-spezifische Overrides
+│   ├── int/
+│   │   ├── .env
+│   │   └── docker-compose.override.yml
+│   └── prod/
+│       ├── .env
+│       └── docker-compose.override.yml
+├── dbt_project/
+│   └── profiles.yml                    # Multi-Target (dev/int/prod)
+└── airflow/dags/                       # Lesen AIRFLOW_ENV fuer Verhalten
+```
+
+Start pro Umgebung:
+```bash
+docker compose -f docker-compose.yml -f environments/prod/docker-compose.override.yml up -d
+```
+
+### Environment-spezifische Overrides
+
+```yaml
+# environments/prod/docker-compose.override.yml
+services:
+  airflow-scheduler:
+    environment:
+      AIRFLOW_ENV: prod
+      DBT_TARGET: prod
+      POSTGRES_HOST: prod-db.internal
+      AIRFLOW_CONN_DEMO_POSTGRES: postgresql://prod_user:${PROD_DB_PASS}@prod-db:5432/prod_warehouse
+      AIRFLOW_VAR_DBT_TARGET: prod
+      AIRFLOW_VAR_ALERT_EMAIL: team@company.com
+```
+
+### Connections und Variables: Nie von DEV kopieren
+
+Jede Umgebung hat eigene Credentials. Die empfohlene Methode ist `AIRFLOW_CONN_*` und `AIRFLOW_VAR_*` Environment-Variablen:
+
+| Konfiguration | Methode | Beispiel |
+|---------------|---------|---------|
+| **DB-Credentials** | `AIRFLOW_CONN_*` Env-Var | `AIRFLOW_CONN_DEMO_POSTGRES=postgresql://...` |
+| **Nicht-geheime Config** | `AIRFLOW_VAR_*` Env-Var | `AIRFLOW_VAR_DBT_TARGET=prod` |
+| **Secrets** | `.env`-Datei (gitignored) | `PROD_DB_PASS=...` |
+| **Runtime-veraenderbare Werte** | Airflow Variables in der DB | Feature-Flags, Schedules |
+
+### dbt profiles.yml: Multi-Target
+
+```yaml
+northwind_vault:
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
+      port: 5432
+      user: "{{ env_var('POSTGRES_USER', 'demo_user') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', 'demo_pass') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'demo') }}"
+      schema: public
+      threads: 4
+    int:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'int-db') }}"
+      port: 5432
+      user: "{{ env_var('POSTGRES_USER', 'int_user') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', '') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'int_warehouse') }}"
+      schema: public
+      threads: 4
+    prod:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'prod-db') }}"
+      port: 5432
+      user: "{{ env_var('POSTGRES_USER', 'prod_user') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', '') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'prod_warehouse') }}"
+      schema: public
+      threads: 8
+```
+
+### Schema-Isolation zwischen Umgebungen
+
+**Option A - Separate Datenbanken (empfohlen):**
+
+| Umgebung | Datenbank | Schemas |
+|----------|-----------|---------|
+| DEV | `dev_warehouse` | `staging`, `raw_vault`, `mart` |
+| INT | `int_warehouse` | `staging`, `raw_vault`, `mart` |
+| PROD | `prod_warehouse` | `staging`, `raw_vault`, `mart` |
+
+**Option B - Schema-Prefix (gleiche Datenbank):**
+
+Ueber ein angepasstes `generate_schema_name` Macro:
+```sql
+{% macro generate_schema_name(custom_schema_name, node) %}
+    {% set env_prefix = var('env_prefix', '') %}
+    {% if env_prefix and custom_schema_name %}
+        {{ env_prefix }}_{{ custom_schema_name }}
+    {% elif custom_schema_name %}
+        {{ custom_schema_name }}
+    {% else %}
+        {{ target.schema }}
+    {% endif %}
+{% endmacro %}
+```
+
+Ergibt z.B. `int_staging`, `int_raw_vault` etc.
+
+### Cosmos-DAG: Environment-aware
+
+```python
+ENV = os.getenv("AIRFLOW_ENV", "dev")
+DBT_TARGET = os.getenv("DBT_TARGET", "dev")
+
+CONN_IDS = {"dev": "demo_postgres", "int": "int_postgres", "prod": "prod_postgres"}
+SCHEDULES = {"dev": None, "int": "@daily", "prod": "0 6 * * *"}
+
+profile_config = ProfileConfig(
+    profile_name="northwind_vault",
+    target_name=DBT_TARGET,
+    profile_mapping=PostgresUserPasswordProfileMapping(
+        conn_id=CONN_IDS[ENV],
+    ),
+)
+
+DbtDag(
+    dag_id="dbt_cosmos",
+    schedule=SCHEDULES[ENV],
+    profile_config=profile_config,
+    tags=["dbt", "cosmos", ENV],
+    ...
+)
+```
+
+### CI/CD Pipeline
+
+```
+PR erstellt   →  DAG-Parse-Check + dbt compile + Unit-Tests
+Merge          →  Auto-Deploy DEV
+               →  Auto-Deploy INT
+               →  Manual Gate → Deploy PROD
+```
+
+**dbt Slim CI** (nur geaenderte Modelle testen):
+```bash
+# Vergleich gegen Produktions-Manifest:
+dbt build --select state:modified+ --state ./prod-artifacts/ --target int
+```
+
+Das verkuerzt einen 10-Minuten-Full-Build auf ~30 Sekunden fuer inkrementelle Aenderungen.
+
+**DAG-Validierung in CI:**
+```bash
+# Prueft ob alle DAGs ohne Import-Fehler parsbar sind:
+docker compose run --rm airflow-scheduler airflow dags list
+# Exit-Code != 0 bei Fehlern
+```
+
+### Rollback-Strategie
+
+```bash
+# Jedes Deployment taggen:
+git tag "deploy/prod/$(git rev-parse --short HEAD)"
+
+# Rollback = vorherigen Tag auschecken:
+git checkout deploy/prod/<previous-tag>
+docker compose -f docker-compose.yml -f environments/prod/docker-compose.override.yml up -d --build
+```
+
+### Zusammenfassung
+
+| Thema | Empfehlung |
+|-------|------------|
+| **Branching** | Ein Branch + `AIRFLOW_ENV` Environment-Variable |
+| **Docker** | dbt-Projekt ins Image baken; DAGs per Volume-Mount |
+| **Connections** | `AIRFLOW_CONN_*` Env-Vars pro Umgebung (nie von DEV kopieren) |
+| **Secrets** | `.env`-Dateien pro Umgebung, gitignored |
+| **dbt Targets** | Multi-Target `profiles.yml` mit `env_var()`, gesteuert durch `DBT_TARGET` |
+| **Schema-Isolation** | Separate Datenbanken oder Schema-Prefix via Macro |
+| **Cosmos** | Environment-aware DAGs (Schedule, Connection, Target) |
+| **CI: DAGs** | `airflow dags list` fuer Parse-Check |
+| **CI: dbt** | Slim CI mit `state:modified+` gegen Produktions-Manifest |
+| **Promotion** | Auto-Deploy DEV/INT bei Merge; manuelles Gate fuer PROD |
+| **Rollback** | Git-Tags pro Deploy + explizite Docker Image Tags |
+
+---
+
 ## Bekannte Einschraenkungen
 
 - **AutomateDV Bridge + Effectivity Satellite**: Beide Macros sind in AutomateDV deprecated und wurden aus dem Projekt entfernt. Siehe [GitHub Issue](https://github.com/Datavault-UK/automate-dv/blob/master/macros/tables/postgres/bridge.sql).
