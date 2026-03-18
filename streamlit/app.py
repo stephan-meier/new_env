@@ -19,7 +19,7 @@ def get_connection():
     )
 
 # --- Logo ---
-st.image("/app/logo/full_r.png", width=300)
+# st.image("/app/logo/full_r.png", width=300)
 
 # --- Navigation ---
 tab_portal, tab_quality, tab_incremental, tab_psa, tab_devtips, tab_readme = st.tabs(
