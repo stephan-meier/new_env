@@ -1,27 +1,27 @@
 # Data Vault Demo Environment
 
-Komplett dockerisierte Demo-Umgebung fuer **dbt**, **AutomateDV** (Data Vault 2.0) und **Airflow 3** Orchestrierung auf **PostgreSQL**. Gedacht fuer Schulungen, Workshops und Team-Demos.
+Komplett dockerisierte Demo-Umgebung für **dbt**, **AutomateDV** (Data Vault 2.0) und **Airflow 3** Orchestrierung auf **PostgreSQL**. Gedacht für Schulungen, Workshops und Team-Demos.
 
 ## Was zeigt diese Demo?
 
 ### Data Vault 2.0 mit AutomateDV
-Ein vollstaendiges Data-Vault-Modell auf Basis eines Northwind-aehnlichen Bestellsystems:
+Ein vollständiges Data-Vault-Modell auf Basis eines Northwind-ähnlichen Bestellsystems:
 
 | Schicht | Schema | Inhalt |
 |---------|--------|--------|
 | **Raw** | `raw` | Rohdaten aus CSV-Dateien (5 Tabellen) |
 | **Staging** | `staging` | Bereinigte Views mit Hash-Keys und Metadaten (AutomateDV `stage` Macro) |
 | **Raw Vault** | `raw_vault` | 4 Hubs, 3 Links, 5 Satellites, 2 PIT-Tabellen |
-| **Marts** | `mart` | 3 Business-Tabellen (Umsatz/Kunde, Bestelluebersicht, Produktverkaeufe) |
+| **Marts** | `mart` | 3 Business-Tabellen (Umsatz/Kunde, Bestellübersicht, Produktverkäufe) |
 
 ### Airflow-Orchestrierung: Klassisch vs. Cosmos
-Zwei alternative Ansaetze im direkten Vergleich:
+Zwei alternative Ansätze im direkten Vergleich:
 
 - **`dbt_classic`** - BashOperator-Kette: `dbt deps` → `dbt seed` → `dbt run` (staging → raw_vault → marts) → `dbt test`. Einfach, aber ein Task pro Phase.
-- **`dbt_cosmos`** - Astronomer Cosmos parst das dbt-Projekt automatisch und erstellt **43 individuelle Airflow-Tasks** mit vollstaendigem Dependency-Graph. Retry und Monitoring auf Modell-Ebene.
+- **`dbt_cosmos`** - Astronomer Cosmos parst das dbt-Projekt automatisch und erstellt **43 individuelle Airflow-Tasks** mit vollständigem Dependency-Graph. Retry und Monitoring auf Modell-Ebene.
 
 ### Quelldaten
-Northwind-aehnliches Bestellsystem mit 5 Tabellen:
+Northwind-ähnliches Bestellsystem mit 5 Tabellen:
 
 | Tabelle | Zeilen | Beschreibung |
 |---------|--------|-------------|
@@ -51,30 +51,30 @@ cp .env.example .env
 
 **Secrets generieren und in `.env` eintragen:**
 ```bash
-# Fernet Key (fuer Airflow Connection/Variable-Verschluesselung)
+# Fernet Key (für Airflow Connection/Variable-Verschlüsselung)
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
 # Falls cryptography nicht installiert: alternativ mit openssl
 openssl rand -base64 32
 
-# API Secret + JWT Secret (fuer Airflow 3 Container-Kommunikation)
+# API Secret + JWT Secret (für Airflow 3 Container-Kommunikation)
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 > **Warum 3 verschiedene Keys?**
-> - `FERNET_KEY`: Verschluesselt Passwoerter in Airflow Connections/Variables in der DB
+> - `FERNET_KEY`: Verschlüsselt Passwörter in Airflow Connections/Variables in der DB
 > - `API__SECRET_KEY`: Signiert die API-Session (wie Flask SECRET_KEY)
 > - `API_AUTH__JWT_SECRET`: Signiert JWT-Tokens zwischen Scheduler/Worker und API-Server
 >
-> **Alle 3 muessen auf allen Airflow-Containern identisch sein!** Siehe [Airflow 3 Upgrade-Hinweise](#airflow-3-vs-2x-upgrade-hinweise) fuer Details.
+> **Alle 3 müssen auf allen Airflow-Containern identisch sein!** Siehe [Airflow 3 Upgrade-Hinweise](#airflow-3-vs-2x-upgrade-hinweise) für Details.
 
 ```bash
 # Alle Container bauen und starten
 docker compose up -d --build
 
 # Erster Start dauert ca. 3-5 Minuten (Image-Download + Build)
-# Status pruefen:
+# Status prüfen:
 docker compose ps
 ```
 
@@ -103,12 +103,12 @@ docker compose up -d --scale airflow-worker=3
 # Worker-Status in Flower beobachten: http://localhost:5555
 ```
 
-### Stoppen und Aufraeumen
+### Stoppen und Aufräumen
 ```bash
 # Stoppen (Daten bleiben erhalten)
 docker compose down
 
-# Stoppen + alle Daten loeschen (frischer Neustart)
+# Stoppen + alle Daten löschen (frischer Neustart)
 docker compose down -v
 ```
 
@@ -118,15 +118,15 @@ docker compose down -v
 
 ### 1. Rohdaten laden
 In der Airflow UI den DAG **`init_raw_data`** triggern. Dieser:
-- Loescht alle bestehenden Raw-Tabellen (idempotent)
+- Löscht alle bestehenden Raw-Tabellen (idempotent)
 - Erstellt die Tabellen neu (Postgres-DDL)
-- Laedt die 5 CSV-Dateien per `COPY`
+- Lädt die 5 CSV-Dateien per `COPY`
 
-→ Ergebnis in pgAdmin pruefen: `raw.customers`, `raw.orders`, etc.
+→ Ergebnis in pgAdmin prüfen: `raw.customers`, `raw.orders`, etc.
 
 ### 2. Data Vault aufbauen (Variante A: Klassisch)
 DAG **`dbt_classic`** triggern:
-- `dbt seed` laedt CSV-Daten als Alternative in Raw-Schema
+- `dbt seed` lädt CSV-Daten als Alternative in Raw-Schema
 - `dbt run --select staging` erstellt Staging-Views mit Hash-Keys
 - `dbt run --select raw_vault` baut Hubs, Links, Satellites, PITs
 - `dbt run --select marts` erstellt Business-Tabellen
@@ -137,24 +137,24 @@ DAG **`dbt_cosmos`** triggern:
 - Cosmos parst das dbt-Projekt automatisch
 - Jedes dbt-Modell wird ein eigener Airflow-Task
 - Der Dependency-Graph ist in der Airflow UI sichtbar
-- 43 Tasks mit vollstaendiger Parallelisierung
+- 43 Tasks mit vollständiger Parallelisierung
 
-### 4. Inkrementellen Delta-Load ausfuehren
+### 4. Inkrementellen Delta-Load ausführen
 DAG **`load_delta`** triggern:
-- **Kein DROP** - die Delta-CSVs werden per COPY in die bestehenden Raw-Tabellen **angehaengt**
-- `dbt run` laeuft **ohne** `--full-refresh`, sodass AutomateDVs Incremental-Logik greift:
-  - Hubs: nur neue Business Keys werden eingefuegt
-  - Satellites: nur geaenderte Hashdiffs erzeugen neue Versionen (Historisierung!)
+- **Kein DROP** - die Delta-CSVs werden per COPY in die bestehenden Raw-Tabellen **angehängt**
+- `dbt run` läuft **ohne** `--full-refresh`, sodass AutomateDVs Incremental-Logik greift:
+  - Hubs: nur neue Business Keys werden eingefügt
+  - Satellites: nur geänderte Hashdiffs erzeugen neue Versionen (Historisierung!)
   - Links: nur neue Beziehungs-Kombinationen
 
 **Delta-Daten (Batch 2, `change_date` = 2024-01-15):**
 | Datei | Inhalt | Effekt im Vault |
 |-------|--------|----------------|
-| `CUSTOMERS_DELTA.csv` | 3 neue + 2 geaenderte Kunden | Hub: +3, Sat: +5 |
+| `CUSTOMERS_DELTA.csv` | 3 neue + 2 geänderte Kunden | Hub: +3, Sat: +5 |
 | `ORDERS_DELTA.csv` | 5 neue Bestellungen | Hub: +5, alle Links: +5 |
 | `ORDER_DETAILS_DELTA.csv` | 8 neue Positionen | Link Order-Product: +8, Sat: +8 |
 
-→ Im **Streamlit Portal** (Tab "Inkrementelle Loads") koennen die Vorher/Nachher-Zahlen und die Satellite-Historisierung live geprueft werden.
+→ Im **Streamlit Portal** (Tab "Inkrementelle Loads") können die Vorher/Nachher-Zahlen und die Satellite-Historisierung live geprüft werden.
 
 ### 5. Ergebnisse erkunden
 - **pgAdmin** (localhost:5050): SQL-Abfragen auf alle Schemas
@@ -162,7 +162,7 @@ DAG **`load_delta`** triggern:
 - **DBeaver**: Direktverbindung zu PostgreSQL
 
 ### Demo-Reset
-Fuer einen sauberen Neustart einfach `init_raw_data` erneut triggern - der DAG macht `DROP TABLE IF EXISTS` bevor er neu laedt.
+Für einen sauberen Neustart einfach `init_raw_data` erneut triggern - der DAG macht `DROP TABLE IF EXISTS` bevor er neu lädt.
 
 ---
 
@@ -241,35 +241,35 @@ Lokale Volumes (gemountet):
 
 ## Airflow 3 vs. 2.x: Upgrade-Hinweise
 
-Diese Demo laeuft auf **Airflow 3.0.2**. Bei einem Upgrade von 2.x auf 3.x gibt es mehrere kritische Unterschiede, die wir beim Aufbau dieser Umgebung erfahren haben:
+Diese Demo läuft auf **Airflow 3.0.2**. Bei einem Upgrade von 2.x auf 3.x gibt es mehrere kritische Unterschiede, die wir beim Aufbau dieser Umgebung erfahren haben:
 
-### Architektur-Aenderungen
+### Architekturänderungen
 
 | Komponente | Airflow 2.x | Airflow 3.x |
 |-----------|-------------|-------------|
 | Web UI | `airflow webserver` | **`airflow api-server`** (Webserver existiert nicht mehr) |
 | DAG Parsing | Im Scheduler integriert | **`airflow dag-processor`** als separater Prozess |
-| Task Execution | Scheduler startet Tasks direkt | Tasks kommunizieren ueber **Execution API** mit dem API-Server |
+| Task Execution | Scheduler startet Tasks direkt | Tasks kommunizieren über **Execution API** mit dem API-Server |
 | User Management | `airflow users create` | Nur mit **FAB-Provider** (`apache-airflow-providers-fab`) |
 | Triggerer | Optional | **Pflicht** als eigener Service |
 
 ### Kritisches Problem: JWT-Signatur zwischen Containern
 
-**Das groesste Problem bei Airflow 3 im Multi-Container-Setup:**
+**Das grösste Problem bei Airflow 3 im Multi-Container-Setup:**
 
-In Airflow 3 kommunizieren Task-Worker (die vom Scheduler gestartet werden) mit dem API-Server ueber eine **interne Execution API**. Diese API verwendet **JWT-Tokens** zur Authentifizierung. Die JWT-Tokens werden mit einem `secret_key` und `jwt_secret` signiert.
+In Airflow 3 kommunizieren Task-Worker (die vom Scheduler gestartet werden) mit dem API-Server über eine **interne Execution API**. Diese API verwendet **JWT-Tokens** zur Authentifizierung. Die JWT-Tokens werden mit einem `secret_key` und `jwt_secret` signiert.
 
-**Das Problem:** Wenn `api-server` und `scheduler` in **separaten Containern** laufen, generiert jeder Container beim ersten Start **eigene, zufaellige Secrets** in seiner lokalen `airflow.cfg`. Der Scheduler signiert den JWT mit seinem Secret, der API-Server prueft mit seinem eigenen → **Signature verification failed**.
+**Das Problem:** Wenn `api-server` und `scheduler` in **separaten Containern** laufen, generiert jeder Container beim ersten Start **eigene, zufällige Secrets** in seiner lokalen `airflow.cfg`. Der Scheduler signiert den JWT mit seinem Secret, der API-Server prüft mit seinem eigenen → **Signature verification failed**.
 
-**Die Loesung:** Alle Airflow-Container muessen dieselbe `airflow.cfg` mit identischen Secrets teilen:
+**Die Lösung:** Alle Airflow-Container müssen dieselbe `airflow.cfg` mit identischen Secrets teilen:
 
 ```ini
 # airflow/config/airflow.cfg
 [api]
-secret_key = <identischer-key-fuer-alle-container>
+secret_key = <identischer-key-für-alle-container>
 
 [api_auth]
-jwt_secret = <identischer-key-fuer-alle-container>
+jwt_secret = <identischer-key-für-alle-container>
 ```
 
 Diese Datei wird per Volume in alle Container gemountet:
@@ -280,15 +280,15 @@ environment:
   AIRFLOW_CONFIG: "/opt/airflow/config/airflow.cfg"
 ```
 
-**In Airflow 2.x war das kein Problem**, weil der Webserver und Scheduler ueber die gemeinsame Datenbank kommunizierten und keine API-basierte Task-Execution stattfand.
+**In Airflow 2.x war das kein Problem**, weil der Webserver und Scheduler über die gemeinsame Datenbank kommunizierten und keine API-basierte Task-Execution stattfand.
 
 ### Astronomer Cosmos + Airflow 3: Zwei kritische Bugs
 
-Beim Einsatz von **astronomer-cosmos 1.13.1** mit Airflow 3.0.2 traten zwei zusammenhaengende Probleme auf:
+Beim Einsatz von **astronomer-cosmos 1.13.1** mit Airflow 3.0.2 traten zwei zusammenhängende Probleme auf:
 
 **Problem 1: `ParamValidationError` auf `__cosmos_telemetry_metadata__`**
 
-Cosmos fuegt jedem DAG einen versteckten Parameter `__cosmos_telemetry_metadata__` hinzu, der Telemetrie-Daten als Base64-encodierten String enthaelt. Dieser wird mit einem JSON-Schema `const`-Constraint validiert. In Airflow 3 ist die Param-Validierung **strikt**: Der Hash wird beim DAG-Parsing generiert, aendert sich aber bis zur Task-Execution (z.B. durch Cache-Invalidierung), wodurch die Validierung fehlschlaegt.
+Cosmos fügt jedem DAG einen versteckten Parameter `__cosmos_telemetry_metadata__` hinzu, der Telemetrie-Daten als Base64-encodierten String enthält. Dieser wird mit einem JSON-Schema `const`-Constraint validiert. In Airflow 3 ist die Param-Validierung **strikt**: Der Hash wird beim DAG-Parsing generiert, ändert sich aber bis zur Task-Execution (z.B. durch Cache-Invalidierung), wodurch die Validierung fehlschlägt.
 
 ```
 ParamValidationError: Invalid input for param __cosmos_telemetry_metadata__:
@@ -296,20 +296,20 @@ ParamValidationError: Invalid input for param __cosmos_telemetry_metadata__:
 Failed validating 'const' in schema
 ```
 
-**Loesung:**
+**Lösung:**
 ```yaml
 AIRFLOW__COSMOS__PROPAGATE_TELEMETRY: "False"
 ```
 
 **Problem 2: DAG-Parse-Timeout bei `dbt ls` ohne Cache**
 
-Wenn man den Cosmos-Cache deaktiviert (als Workaround fuer Problem 1), fuehrt Cosmos bei **jedem DAG-Parse** `dbt deps` + `dbt ls` aus. In einem Container mit dbt im isolierten venv dauert das >30 Sekunden und ueberschreitet den Airflow `dagbag_import_timeout`:
+Wenn man den Cosmos-Cache deaktiviert (als Workaround für Problem 1), führt Cosmos bei **jedem DAG-Parse** `dbt deps` + `dbt ls` aus. In einem Container mit dbt im isolierten venv dauert das >30 Sekunden und überschreitet den Airflow `dagbag_import_timeout`:
 
 ```
 AirflowTaskTimeout: DagBag import timeout for dag_dbt_cosmos.py after 30.0s
 ```
 
-**Loesung: `LoadMode.DBT_MANIFEST`**
+**Lösung: `LoadMode.DBT_MANIFEST`**
 
 Statt `dbt ls` beim Parsen liest Cosmos ein vorbereitetes `manifest.json`:
 ```python
@@ -326,7 +326,7 @@ project_config=ProjectConfig(
 
 Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount bereitgestellt. **Vorteil**: Sofortiges DAG-Parsing ohne Subprocess-Aufruf.
 
-> **Beide Probleme existieren in Airflow 2.x nicht**, weil dort (a) die Param-Validierung weniger strikt ist und (b) laengere Parse-Zeiten toleriert werden.
+> **Beide Probleme existieren in Airflow 2.x nicht**, weil dort (a) die Param-Validierung weniger strikt ist und (b) längere Parse-Zeiten toleriert werden.
 
 ### Weitere Upgrade-Stolpersteine
 
@@ -334,9 +334,9 @@ Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount b
    ```yaml
    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-apiserver:8080/execution/"
    ```
-   Ohne diese Variable wissen Scheduler-Worker nicht, wo der API-Server laeuft.
+   Ohne diese Variable wissen Scheduler-Worker nicht, wo der API-Server läuft.
 
-2. **BashOperator Import-Pfad geaendert**
+2. **BashOperator Import-Pfad geändert**
    ```python
    # Alt (Airflow 2.x) - funktioniert noch, gibt Deprecation-Warning
    from airflow.operators.bash import BashOperator
@@ -344,7 +344,7 @@ Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount b
    from airflow.providers.standard.operators.bash import BashOperator
    ```
 
-3. **FAB-Provider fuer User Management**
+3. **FAB-Provider für User Management**
    ```
    pip install apache-airflow-providers-fab
    ```
@@ -353,7 +353,7 @@ Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount b
 4. **`schedule_interval` entfernt** - nur noch `schedule=None` oder `schedule="@daily"` etc.
 
 5. **Offizielles Docker-Compose als Referenz nutzen**
-   Das offizielle Template unter `https://airflow.apache.org/docs/apache-airflow/3.0.2/docker-compose.yaml` ist die beste Ausgangsbasis. Diese Demo verwendet CeleryExecutor + Redis + Flower fuer Worker-Skalierung und Monitoring.
+   Das offizielle Template unter `https://airflow.apache.org/docs/apache-airflow/3.0.2/docker-compose.yaml` ist die beste Ausgangsbasis. Diese Demo verwendet CeleryExecutor + Redis + Flower für Worker-Skalierung und Monitoring.
 
 ---
 
@@ -361,16 +361,16 @@ Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount b
 
 ### dbt + AutomateDV
 
-- **dbt-postgres** laeuft in einem isolierten Python-venv (`/home/airflow/dbt_venv/`) innerhalb der Airflow-Container, um Dependency-Konflikte mit Airflow 3 zu vermeiden (insb. `protobuf`).
+- **dbt-postgres** läuft in einem isolierten Python-venv (`/home/airflow/dbt_venv/`) innerhalb der Airflow-Container, um Dependency-Konflikte mit Airflow 3 zu vermeiden (insb. `protobuf`).
 - **AutomateDV 0.11.1** - die Macros `hub`, `link`, `sat`, `stage` und `pit` funktionieren auf Postgres. Die Macros `bridge` und `eff_sat` sind [deprecated](https://github.com/Datavault-UK/automate-dv/blob/master/macros/tables/postgres/bridge.sql) und wurden daher nicht verwendet.
-- **Staging-Modelle** nutzen das `automate_dv.stage` Macro mit `source()`-Referenzen fuer automatisches Hashing (MD5) der Business Keys und Hashdiffs.
+- **Staging-Modelle** nutzen das `automate_dv.stage` Macro mit `source()`-Referenzen für automatisches Hashing (MD5) der Business Keys und Hashdiffs.
 
 ### Projekt-Struktur
 ```
 new_env/
 ├── docker-compose.yml          # 11 Services (Postgres, Redis, 6x Airflow, dbt-docs, pgAdmin, Streamlit)
 ├── Dockerfile.airflow          # Airflow 3 + Cosmos + dbt (isolierter venv)
-├── Dockerfile.dbt              # dbt fuer Docs-Server
+├── Dockerfile.dbt              # dbt für Docs-Server
 ├── .env                        # Shared Secrets (Fernet Key, JWT)
 ├── daten/                      # CSV-Quelldaten
 ├── dbt_project/                # Komplettes dbt-Projekt
@@ -379,24 +379,24 @@ new_env/
 │   └── models/marts/           # 3 Business-Tabellen
 ├── airflow/
 │   ├── dags/                   # 4 DAGs (init, classic, cosmos, delta)
-│   └── config/airflow.cfg      # Shared Secrets fuer JWT-Auth
+│   └── config/airflow.cfg      # Shared Secrets für JWT-Auth
 ├── postgres/init/              # DB-Init-Scripte (Schemas)
 └── streamlit/                  # Portal-App
 ```
 
 ---
 
-## Datenqualitaet mit dbt-expectations
+## Datenqualität mit dbt-expectations
 
-Neben den Standard-Tests (`unique`, `not_null`) setzt diese Demo [dbt-expectations](https://github.com/calogica/dbt-expectations) ein - eine dbt-native Portierung von Great Expectations mit ueber 50 fachlichen Test-Macros.
+Neben den Standard-Tests (`unique`, `not_null`) setzt diese Demo [dbt-expectations](https://github.com/calogica/dbt-expectations) ein - eine dbt-native Portierung von Great Expectations mit über 50 fachlichen Test-Macros.
 
-### Test-Uebersicht (19 Tests)
+### Test-Übersicht (19 Tests)
 
 | Schicht | Test | Zweck | Ergebnis |
 |---------|------|-------|----------|
 | **Staging** | `expect_column_pair_values_A_to_be_greater_than_B` | shipped_date >= order_date | **WARN: 304 Verletzungen!** |
 | **Staging** | `expect_column_values_to_match_regex` | Email-Format-Validierung | PASS |
-| **Staging** | `expect_column_values_to_be_between` | Versandgebuehr 0-100, Rabatt 0-100%, Preis > 0, Menge > 0 | PASS |
+| **Staging** | `expect_column_values_to_be_between` | Versandgebühr 0-100, Rabatt 0-100%, Preis > 0, Menge > 0 | PASS |
 | **Staging** | `expect_column_distinct_count_to_equal` | Genau 4 Bestellstatus | PASS |
 | **Raw Vault** | `expect_column_proportion_of_unique_values` | Hub: 100% unique, Satellite: < 100% (Historisierung!) | PASS |
 | **Raw Vault** | `expect_compound_columns_to_be_unique` | Link-Kombinationen eindeutig | PASS |
@@ -406,18 +406,18 @@ Neben den Standard-Tests (`unique`, `not_null`) setzt diese Demo [dbt-expectatio
 
 ### Demo-Highlight: shipped_date < order_date
 
-Der Test `expect_column_pair_values_A_to_be_greater_than_B` deckt auf, dass **304 von 605 Bestellungen** ein `shipped_date` haben, das **vor** dem `order_date` liegt - ein echtes Datenqualitaetsproblem, das kein `not_null`/`unique`-Test je finden wuerde.
+Der Test `expect_column_pair_values_A_to_be_greater_than_B` deckt auf, dass **304 von 605 Bestellungen** ein `shipped_date` haben, das **vor** dem `order_date` liegt - ein echtes Datenqualitätsproblem, das kein `not_null`/`unique`-Test je finden würde.
 
 ```bash
-# Tests ausfuehren (innerhalb des Airflow-Workers):
+# Tests ausführen (innerhalb des Airflow-Workers):
 dbt test --select tag:quality tag:vault-integrity tag:freshness tag:business-logic
 ```
 
 ---
 
-## Plattform-Kompatibilitaet (macOS, Windows, Ubuntu)
+## Plattform-Kompatibilität (macOS, Windows, Ubuntu)
 
-Die gesamte Umgebung laeuft in Docker-Containern und ist plattformunabhaengig. **Kein einziges File im Projekt muss geaendert werden** - Docker loest die Architektur (ARM vs. Intel) automatisch auf. Alle verwendeten Base-Images (`postgres:16-alpine`, `apache/airflow:3.0.2`, `python:3.11-slim`, `redis:7.2-bookworm`, `dpage/pgadmin4`) bieten Multi-Arch-Images an.
+Die gesamte Umgebung läuft in Docker-Containern und ist plattformunabhängig. **Kein einziges File im Projekt muss geändert werden** - Docker löst die Architektur (ARM vs. Intel) automatisch auf. Alle verwendeten Base-Images (`postgres:16-alpine`, `apache/airflow:3.0.2`, `python:3.11-slim`, `redis:7.2-bookworm`, `dpage/pgadmin4`) bieten Multi-Arch-Images an.
 
 | Thema | macOS (ARM) | Windows (Intel) | Ubuntu (Intel) |
 |-------|-------------|-----------------|----------------|
@@ -429,7 +429,7 @@ Die gesamte Umgebung laeuft in Docker-Containern und ist plattformunabhaengig. *
 ### Windows-spezifische Hinweise
 
 - **Docker Desktop mit WSL2-Backend** muss aktiviert sein (nicht Hyper-V)
-- Repo am besten unter WSL2 klonen (`/home/user/`, nicht `/mnt/c/`) fuer deutlich bessere I/O-Performance bei Volume-Mounts
+- Repo am besten unter WSL2 klonen (`/home/user/`, nicht `/mnt/c/`) für deutlich bessere I/O-Performance bei Volume-Mounts
 - Line-Endings: `git config core.autocrlf input` setzen, damit CSVs und Shell-Scripts LF behalten
 
 ### Ubuntu-spezifische Hinweise
@@ -439,7 +439,7 @@ Die gesamte Umgebung laeuft in Docker-Containern und ist plattformunabhaengig. *
   sudo apt install docker.io docker-compose-v2
   sudo usermod -aG docker $USER
   ```
-- Nach dem `usermod`-Befehl neu einloggen oder `newgrp docker` ausfuehren
+- Nach dem `usermod`-Befehl neu einloggen oder `newgrp docker` ausführen
 
 ---
 
@@ -447,17 +447,17 @@ Die gesamte Umgebung laeuft in Docker-Containern und ist plattformunabhaengig. *
 
 ### Das Problem
 
-In einem Data Vault speichern Satellites die **komplette Aenderungshistorie** jeder Entitaet. Diese Historisierung ist der Kernwert des Modells - einmal verloren, ist sie nicht aus den Quelldaten rekonstruierbar (die Quellsysteme halten typischerweise nur den aktuellen Stand).
+In einem Data Vault speichern Satellites die **komplette Änderungshistorie** jeder Entität. Diese Historisierung ist der Kernwert des Modells - einmal verloren, ist sie nicht aus den Quelldaten rekonstruierbar (die Quellsysteme halten typischerweise nur den aktuellen Stand).
 
-**Gefahr:** Ein versehentliches `dbt run --full-refresh` auf den Raw Vault Modellen wuerde alle Satellite-Tabellen droppen und neu aufbauen - nur mit den aktuellen Daten aus Staging. Die gesamte Historie waere unwiderruflich verloren.
+**Gefahr:** Ein versehentliches `dbt run --full-refresh` auf den Raw Vault Modellen würde alle Satellite-Tabellen droppen und neu aufbauen - nur mit den aktuellen Daten aus Staging. Die gesamte Historie wäre unwiderruflich verloren.
 
-In klassischen dbt-Projekten (ohne Data Vault) nutzt man `dbt snapshot` fuer SCD2-Historisierung. Snapshots haben einen eingebauten Schutzmechanismus: Sie sind als eigenstaendiger Befehl (`dbt snapshot`) von `dbt run` getrennt. Bei AutomateDV sind die Satellites jedoch normale `incremental`-Modelle, die ueber `dbt run` gesteuert werden - und damit anfaellig fuer `--full-refresh`.
+In klassischen dbt-Projekten (ohne Data Vault) nutzt man `dbt snapshot` für SCD2-Historisierung. Snapshots haben einen eingebauten Schutzmechanismus: Sie sind als eigenständiger Befehl (`dbt snapshot`) von `dbt run` getrennt. Bei AutomateDV sind die Satellites jedoch normale `incremental`-Modelle, die über `dbt run` gesteuert werden - und damit anfällig für `--full-refresh`.
 
 ### Schutzmechanismen in dieser Demo
 
 #### 1. `full_refresh: false` (aktiv)
 
-In `dbt_project.yml` ist fuer alle Raw Vault Modelle `full_refresh: false` konfiguriert:
+In `dbt_project.yml` ist für alle Raw Vault Modelle `full_refresh: false` konfiguriert:
 
 ```yaml
 raw_vault:
@@ -465,34 +465,34 @@ raw_vault:
   +full_refresh: false   # Blockiert --full-refresh komplett
 ```
 
-**Effekt:** Wenn jemand `dbt run --full-refresh` ausfuehrt, werden Raw Vault Modelle **uebersprungen** statt neu aufgebaut. dbt gibt eine Warnung aus:
+**Effekt:** Wenn jemand `dbt run --full-refresh` ausführt, werden Raw Vault Modelle **übersprungen** statt neu aufgebaut. dbt gibt eine Warnung aus:
 ```
 Refusing to full-refresh model 'hub_customer' because full_refresh is set to false.
 ```
 
-Das ist der staerkste dbt-native Schutz und seit dbt 1.6 verfuegbar.
+Das ist der stärkste dbt-native Schutz und seit dbt 1.6 verfügbar.
 
 #### 2. Airflow DAGs ohne --full-refresh
 
 Die DAGs `dbt_classic` und `dbt_cosmos` verwenden **bewusst kein** `--full-refresh` Flag auf den Raw Vault Modellen. Der `load_delta` DAG nutzt `dbt run` (ohne Flag), damit AutomateDVs eingebaute Incremental-Logik greift.
 
-#### 3. Weitere Mitigationen (fuer Produktionsumgebungen)
+#### 3. Weitere Mitigationen (für Produktionsumgebungen)
 
 | Massnahme | Beschreibung | Aufwand |
 |-----------|-------------|---------|
-| **Postgres-Permissions** | `REVOKE TRUNCATE, DROP ON ALL TABLES IN SCHEMA raw_vault FROM dbt_user` - der dbt-User darf nur INSERT/UPDATE. Ein separater Admin-User behaelt DROP-Rechte. | Mittel |
+| **Postgres-Permissions** | `REVOKE TRUNCATE, DROP ON ALL TABLES IN SCHEMA raw_vault FROM dbt_user` - der dbt-User darf nur INSERT/UPDATE. Ein separater Admin-User behält DROP-Rechte. | Mittel |
 | **Backup vor Full-Refresh** | Pre-Hook in dbt der vor jedem Full-Refresh ein `pg_dump` des raw_vault Schemas erstellt. | Mittel |
-| **CI/CD Guard** | In der CI-Pipeline pruefen ob ein PR `--full-refresh` auf Raw Vault Modelle anwendet und den Build blockieren. | Niedrig |
+| **CI/CD Guard** | In der CI-Pipeline prüfen ob ein PR `--full-refresh` auf Raw Vault Modelle anwendet und den Build blockieren. | Niedrig |
 | **dbt tags + selectors** | Raw Vault Modelle taggen (`+tags: ["protected"]`) und Team-Konvention: `--full-refresh` nur mit explizitem `--exclude tag:protected`. | Niedrig |
-| **Monitoring** | Alert wenn die Zeilenanzahl eines Satellites sinkt (sollte monoton steigen). Umsetzbar mit `dbt_expectations.expect_table_row_count_to_be_between` und einem dynamischen Minimum aus der letzten Ausfuehrung. | Mittel |
+| **Monitoring** | Alert wenn die Zeilenanzahl eines Satellites sinkt (sollte monoton steigen). Umsetzbar mit `dbt_expectations.expect_table_row_count_to_be_between` und einem dynamischen Minimum aus der letzten Ausführung. | Mittel |
 
 #### 4. Architektonischer Schutz: Vorgeschaltete PSA
 
-Die staerkste Variante ist **architektonischer Schutz** durch eine vorgeschaltete **Persistent Staging Area (PSA)**. Statt die Historisierung nur im Data Vault zu halten (wo sie von `--full-refresh` bedroht ist), wird sie in einer separaten, von dbt unabhaengigen Schicht verwaltet:
+Die stärkste Variante ist **architektonischer Schutz** durch eine vorgeschaltete **Persistent Staging Area (PSA)**. Statt die Historisierung nur im Data Vault zu halten (wo sie von `--full-refresh` bedroht ist), wird sie in einer separaten, von dbt unabhängigen Schicht verwaltet:
 
 ```
 OHNE PSA:   CSV → Raw → Data Vault (Historisierung HIER, verwundbar)
-MIT PSA:    CSV → Raw → PSA (Historisierung HIER, stabil) → Data Vault (rebuild-faehig)
+MIT PSA:    CSV → Raw → PSA (Historisierung HIER, stabil) → Data Vault (rebuild-fähig)
 ```
 
 **Wie das funktioniert:**
@@ -501,24 +501,24 @@ MIT PSA:    CSV → Raw → PSA (Historisierung HIER, stabil) → Data Vault (re
 - dbt liest aus der PSA (`source('psa', 'v_customers_cur')`) und baut den Data Vault daraus auf
 - Der Data Vault wird zur **deterministischen Funktion der PSA** — jederzeit neu generierbar
 
-**Warum das schuetzt:**
+**Warum das schützt:**
 - `dbt run --full-refresh` auf den Vault? Kein Problem — Rebuild aus PSA, kein Datenverlust
 - Modellumbau im Data Vault? PSA bleibt unangetastet, neues Modell wird aus derselben Datenbasis gebaut
 - Bug in einer Transformation? PSA-Daten sind korrekt, Core wird idempotent neu aufgebaut
 
-Diese Demo enthaelt einen optionalen PSA-Pfad (DAGs `psa_flow` und `psa_rebuild_demo`), der genau dieses Konzept demonstriert. Siehe [PSA-Pfad mit NG Generator](#psa-pfad-mit-ng-generator-optionaler-alternativer-datenfluss) fuer Details.
+Diese Demo enthält einen optionalen PSA-Pfad (DAGs `psa_flow` und `psa_rebuild_demo`), der genau dieses Konzept demonstriert. Siehe [PSA-Pfad mit NG Generator](#psa-pfad-mit-ng-generator-optionaler-alternativer-datenfluss) für Details.
 
-> **Zusammenfassung:** Fuer die Demo-Umgebung reicht `full_refresh: false` als Minimalschutz. In Produktionsumgebungen empfehlen wir eine vorgeschaltete PSA als architektonischen Schutz, ergaenzt durch Postgres-Permissions und Monitoring.
+> **Zusammenfassung:** Für die Demo-Umgebung reicht `full_refresh: false` als Minimalschutz. In Produktionsumgebungen empfehlen wir eine vorgeschaltete PSA als architektonischen Schutz, ergänzt durch Postgres-Permissions und Monitoring.
 
 ---
 
-## DAG-Splitting-Strategie fuer Produktion
+## DAG-Splitting-Strategie für Produktion
 
-In einer Produktionsumgebung reicht ein einzelner dbt-DAG nicht aus. Verschiedene Quellen, Fachbereiche und Konsumenten haben unterschiedliche Ladezeiten, Abhaengigkeiten und Verantwortlichkeiten. Hier ist die empfohlene Strategie:
+In einer Produktionsumgebung reicht ein einzelner dbt-DAG nicht aus. Verschiedene Quellen, Fachbereiche und Konsumenten haben unterschiedliche Ladezeiten, Abhängigkeiten und Verantwortlichkeiten. Hier ist die empfohlene Strategie:
 
 ### Prinzip: Tags als zentraler Steuerungsmechanismus
 
-dbt-Tags auf Modell-Ebene definieren die fachliche Zugehoerigkeit. Einmal definiert, koennen sie ueberall verwendet werden - in Cosmos DAGs, dbt selectors und CI/CD:
+dbt-Tags auf Modell-Ebene definieren die fachliche Zugehörigkeit. Einmal definiert, können sie überall verwendet werden - in Cosmos DAGs, dbt selectors und CI/CD:
 
 ```yaml
 # dbt_project.yml
@@ -562,7 +562,7 @@ PSA (pro Quelle)                    dbt/Cosmos (pro Domain)           Consumptio
 
 | Schicht | Splitting | Schedule | Trigger |
 |---------|-----------|----------|---------|
-| **PSA** (NG Generator) | Pro Quelle | Zeitgesteuert | Unabhaengig |
+| **PSA** (NG Generator) | Pro Quelle | Zeitgesteuert | Unabhängig |
 | **Core/Vault** (dbt/Cosmos) | Pro fachliche Domain | Nach PSA | Dataset oder Sensor |
 | **Consumption** (dbt/Cosmos) | Pro Konsument/Bereich | Nach Core | Dataset oder zeitversetzt |
 
@@ -582,7 +582,7 @@ DbtDag(
 )
 ```
 
-### Cosmos: DbtTaskGroup fuer Sub-Graphs
+### Cosmos: DbtTaskGroup für Sub-Graphs
 
 Falls mehrere Domains in einem DAG mit expliziter Reihenfolge laufen sollen:
 
@@ -605,7 +605,7 @@ with DAG("dv_nightly") as dag:
 
 ### Cross-DAG Dependencies: PSA triggert dbt
 
-**Variante A - Airflow Datasets (empfohlen fuer Airflow 3):**
+**Variante A - Airflow Datasets (empfohlen für Airflow 3):**
 ```python
 # PSA-DAG publiziert Dataset nach erfolgreichem Load:
 psa_dataset = Dataset("psa://crm_loaded")
@@ -631,9 +631,9 @@ wait_for_psa = ExternalTaskSensor(
 wait_for_psa >> crm_task_group
 ```
 
-### dbt Selectors fuer komplexe Auswahl
+### dbt Selectors für komplexe Auswahl
 
-Fuer fortgeschrittene Szenarien (z.B. nur inkrementelle Modelle einer Domain):
+Für fortgeschrittene Szenarien (z.B. nur inkrementelle Modelle einer Domain):
 
 ```yaml
 # selectors.yml
@@ -651,18 +651,18 @@ Referenz in Cosmos: `select=["selector:crm_incremental"]`
 
 ### Konfiguration von Code trennen (Best Practice)
 
-In der Praxis werden DAGs betrieblich angepasst - Ladezeitpunkte verschieben sich, Abhaengigkeiten aendern sich, einzelne Modelle werden temporaer ausgeschlossen. Diese Anpassungen gehen verloren wenn DAG-Dateien ueber CI/CD redeployed oder regeneriert werden.
+In der Praxis werden DAGs betrieblich angepasst - Ladezeitpunkte verschieben sich, Abhängigkeiten ändern sich, einzelne Modelle werden temporär ausgeschlossen. Diese Anpassungen gehen verloren wenn DAG-Dateien über CI/CD redeployed oder regeneriert werden.
 
 **Das Problem:**
 
 | Anpassung | Wo gespeichert | Risiko bei Redeployment |
 |-----------|---------------|------------------------|
-| Schedule `0 3 * * *` → `0 3,15 * * *` | Hardcodiert im DAG-File | Ueberschrieben |
-| Zusaetzliche Sensor-Dependency | Hardcodiert im DAG-File | Ueberschrieben |
-| `exclude` fuer experimentelle Modelle | Hardcodiert im DAG-File | Ueberschrieben |
+| Schedule `0 3 * * *` → `0 3,15 * * *` | Hardcodiert im DAG-File | überschrieben |
+| Zusätzliche Sensor-Dependency | Hardcodiert im DAG-File | überschrieben |
+| `exclude` für experimentelle Modelle | Hardcodiert im DAG-File | überschrieben |
 | Airflow Variable `dv_crm_config` | Airflow-Datenbank | **Persistiert** |
 
-**Loesung: Betriebliche Parameter in Airflow Variables auslagern:**
+**Lösung: Betriebliche Parameter in Airflow Variables auslagern:**
 
 ```python
 # dag_dv_crm.py - Code ist generierbar/wiederherstellbar
@@ -690,20 +690,20 @@ DbtDag(
   "schedule": "0 3,15 * * *",
   "select": ["tag:domain_crm"],
   "exclude": ["tag:experimental"],
-  "notes": "2x taeglich seit 2026-03-10, Ticket OPS-1234"
+  "notes": "2x täglich seit 2026-03-10, Ticket OPS-1234"
 }
 ```
 
 **Vorteile dieses Patterns:**
-- **DAG-Code ist regenerierbar** - Git-Deployment ueberschreibt keine betrieblichen Anpassungen
-- **Aenderungen ohne Git-Commit** - Betrieb kann Schedules/Excludes sofort anpassen
-- **Audit-Trail** - Variable-Aenderungen werden in der Airflow-DB geloggt
+- **DAG-Code ist regenerierbar** - Git-Deployment überschreibt keine betrieblichen Anpassungen
+- *Änderungen ohne Git-Commit** - Betrieb kann Schedules/Excludes sofort anpassen
+- **Audit-Trail** - Variable Änderungen werden in der Airflow-DB geloggt
 - **Defaults im Code** - Wenn keine Variable gesetzt ist, greifen sinnvolle Defaults
-- **Dokumentation im Wert** - Das `notes`-Feld erklaert warum eine Anpassung gemacht wurde
+- **Dokumentation im Wert** - Das `notes`-Feld erklärt warum eine Anpassung gemacht wurde
 
-> **Faustregel:** Alles was sich zwischen Deployments aendern kann (Schedules, Excludes, Timeouts, Retry-Counts) gehoert in Airflow Variables. Alles was sich nur bei Modell-Aenderungen aendert (Tags, Pfade, Projekt-Config) gehoert in den Code.
+> **Faustregel:** Alles was sich zwischen Deployments ändern kann (Schedules, Excludes, Timeouts, Retry-Counts) gehört in Airflow Variables. Alles was sich nur bei Modell-Änderungen ändert (Tags, Pfade, Projekt-Config) gehört in den Code.
 
-> **Zusammenfassung:** Tags auf den dbt-Modellen sind die Grundlage. Darauf aufbauend erstellt man pro Fachbereich einen eigenen Cosmos-DAG (oder DbtTaskGroup). Cross-DAG-Abhaengigkeiten (PSA → Core → Consumption) werden ueber Airflow Datasets oder ExternalTaskSensors gesteuert. Betriebliche Anpassungen (Schedules, Excludes) werden in Airflow Variables ausgelagert, damit sie Redeployments ueberleben. Ein woechentlicher Full-Rebuild-DAG sichert die Gesamtkonsistenz.
+> **Zusammenfassung:** Tags auf den dbt-Modellen sind die Grundlage. Darauf aufbauend erstellt man pro Fachbereich einen eigenen Cosmos-DAG (oder DbtTaskGroup). Cross-DAG-Abhängigkeiten (PSA → Core → Consumption) werden über Airflow Datasets oder ExternalTaskSensors gesteuert. Betriebliche Anpassungen (Schedules, Excludes) werden in Airflow Variables ausgelagert, damit sie Redeployments überleben. Ein wöchentlicher Full-Rebuild-DAG sichert die Gesamtkonsistenz.
 
 ---
 
@@ -711,17 +711,17 @@ DbtDag(
 
 ### Das 3-Schichten-Problem
 
-In einer Architektur mit Code-Generator + dbt + AutomateDV durchlaeuft jedes SQL-Statement drei Generierungsschichten:
+In einer Architektur mit Code-Generator + dbt + AutomateDV durchläuft jedes SQL-Statement drei Generierungsschichten:
 
 ```
 Schicht 1: Code-Generator    YAML-Metadaten + Jinja-Templates  ->  dbt .sql/.yml Dateien
 Schicht 2: dbt + AutomateDV  dbt-Jinja + AutomateDV Macros     ->  compiled SQL
-Schicht 3: PostgreSQL         Fuehrt das SQL aus                ->  Ergebnis / Fehler
+Schicht 3: PostgreSQL         Führt das SQL aus                ->  Ergebnis / Fehler
 ```
 
-Wenn ein Fehler auftritt, muss man zurueckverfolgen:
-- Ist das **generierte dbt-Modell** korrekt? (Schicht 1 → 2 Uebergang)
-- Ist das **compilierte SQL** korrekt? (Schicht 2 → 3 Uebergang)
+Wenn ein Fehler auftritt, muss man zurückverfolgen:
+- Ist das **generierte dbt-Modell** korrekt? (Schicht 1 → 2 Übergang)
+- Ist das **compilierte SQL** korrekt? (Schicht 2 → 3 Übergang)
 - Oder ist die **YAML-Metadaten-Definition** falsch? (Schicht 1 Eingang)
 
 ### dbt Artefakte verstehen
@@ -730,14 +730,14 @@ dbt schreibt bei jedem Lauf mehrere Artefakte in das `target/`-Verzeichnis:
 
 | Verzeichnis / Datei | Inhalt | Debugging-Nutzen |
 |---------------------|--------|-----------------|
-| `target/compiled/` | Reines SELECT nach Jinja-Aufloesung | "Was hat mein Jinja produziert?" |
-| `target/run/` | Vollstaendiges SQL inkl. DDL (`CREATE TABLE AS`, `MERGE`) | "Was hat Postgres tatsaechlich bekommen?" |
-| `manifest.json` | Kompletter Projekt-Graph inkl. `compiled_code` pro Node | Programmatisch auswertbar, enthaelt compiled SQL |
+| `target/compiled/` | Reines SELECT nach Jinja-Auflösung | "Was hat mein Jinja produziert?" |
+| `target/run/` | Vollständiges SQL inkl. DDL (`CREATE TABLE AS`, `MERGE`) | "Was hat Postgres tatsächlich bekommen?" |
+| `manifest.json` | Kompletter Projekt-Graph inkl. `compiled_code` pro Node | Programmatisch auswertbar, enthält compiled SQL |
 | `run_results.json` | Status, Laufzeit, Fehler pro Node | Test-/Run-Ergebnisse |
-| `sources.json` | Freshness-Ergebnisse pro Source | Datenaktualitaet |
-| `catalog.json` | Warehouse-Katalog (Spalten, Typen, Statistiken) | Fuer dbt Docs |
+| `sources.json` | Freshness-Ergebnisse pro Source | Datenaktualität |
+| `catalog.json` | Warehouse-Katalog (Spalten, Typen, Statistiken) | Für dbt Docs |
 
-**Wichtig:** Das `target/`-Verzeichnis wird bei **jedem** dbt-Lauf ueberschrieben. Fuer Audit-Zwecke muessen die Artefakte nach jedem Lauf archiviert werden (siehe unten).
+**Wichtig:** Das `target/`-Verzeichnis wird bei **jedem** dbt-Lauf überschrieben. Für Audit-Zwecke müssen die Artefakte nach jedem Lauf archiviert werden (siehe unten).
 
 ### Debugging-Workflow
 
@@ -751,23 +751,23 @@ cat dbt_project/models/raw_vault/hubs/hub_customer.sql
 dbt compile --select hub_customer
 cat target/compiled/northwind_vault/models/raw_vault/hubs/hub_customer.sql
 
-# Was wurde tatsaechlich ausgefuehrt? (Schicht 3 Input, mit DDL)
+# Was wurde tatsächlich ausgeführt? (Schicht 3 Input, mit DDL)
 cat target/run/northwind_vault/models/raw_vault/hubs/hub_customer.sql
 ```
 
-**2. SQL-Diff vor/nach Aenderungen:**
+**2. SQL-Diff vor/nach Änderungen:**
 
 ```bash
-# Zustand VOR der Aenderung sichern:
+# Zustand VOR der Änderung sichern:
 dbt compile
 cp -r target/compiled target/compiled_BEFORE
 
-# Code-Generator Config aendern, neu generieren, dann:
+# Code-Generator Config ändern, neu generieren, dann:
 dbt compile
 diff -r target/compiled_BEFORE target/compiled
 ```
 
-Dieser Workflow ist besonders wertvoll bei AutomateDV-Konfigurationsaenderungen - man sieht exakt wie sich eine YAML-Aenderung auf das generierte SQL auswirkt.
+Dieser Workflow ist besonders wertvoll bei AutomateDV-Konfigurationsänderungen - man sieht exakt wie sich eine YAML-Änderung auf das generierte SQL auswirkt.
 
 **3. Debug-Kommentare in Generator-Templates:**
 
@@ -778,20 +778,20 @@ Dieser Workflow ist besonders wertvoll bei AutomateDV-Konfigurationsaenderungen 
 {{ automate_dv.hub(src_pk=src_pk, ...) }}
 ```
 
-Diese Kommentare ueberleben die dbt-Kompilierung und erscheinen im `target/compiled/` Output. So kann man bei einem Fehler sofort sehen, welches Template und welche Metadaten-Version den Code erzeugt haben.
+Diese Kommentare überleben die dbt-Kompilierung und erscheinen im `target/compiled/` Output. So kann man bei einem Fehler sofort sehen, welches Template und welche Metadaten-Version den Code erzeugt haben.
 
-**4. Jinja-Logging fuer Runtime-Debugging:**
+**4. Jinja-Logging für Runtime-Debugging:**
 
 ```sql
 {%- set my_var = some_expression -%}
 {{ log("DEBUG my_var = " ~ my_var, info=True) }}
 ```
 
-Gibt Werte waehrend der Kompilierung auf die Konsole aus, ohne das SQL zu beeinflussen.
+Gibt Werte während der Kompilierung auf die Konsole aus, ohne das SQL zu beeinflussen.
 
 ### Run-Dokumentation: Artefakte archivieren
 
-Das `target/`-Verzeichnis wird bei jedem Lauf ueberschrieben. Fuer eine lueckenlose Dokumentation muessen die Artefakte nach jedem Lauf archiviert werden.
+Das `target/`-Verzeichnis wird bei jedem Lauf überschrieben. Für eine lückenlose Dokumentation müssen die Artefakte nach jedem Lauf archiviert werden.
 
 **Ansatz 1: Archiv-Task in Airflow (einfach)**
 
@@ -806,7 +806,7 @@ archive = BashOperator(
         cp -r /usr/app/dbt/target/compiled /usr/app/dbt/artifact_archive/${TIMESTAMP}/
         cp -r /usr/app/dbt/target/run /usr/app/dbt/artifact_archive/${TIMESTAMP}/
     """,
-    trigger_rule=TriggerRule.ALL_DONE,  # Laeuft IMMER, auch bei Fehlern
+    trigger_rule=TriggerRule.ALL_DONE,  # Läuft IMMER, auch bei Fehlern
 )
 ```
 
@@ -823,7 +823,7 @@ on-run-end:
   - "{{ dbt_artifacts.upload_results(results) }}"
 ```
 
-Schreibt Run-Resultate als Tabellen in die Datenbank. Damit sind historische Laufergebnisse per SQL abfragbar und koennen in Streamlit visualisiert werden.
+Schreibt Run-Resultate als Tabellen in die Datenbank. Damit sind historische Laufergebnisse per SQL abfragbar und können in Streamlit visualisiert werden.
 
 **Ansatz 3: Elementary (umfassende Reports)**
 
@@ -834,11 +834,11 @@ packages:
     version: [">=0.15.0", "<1.0.0"]
 ```
 
-Elementary generiert mit `edr report` ein **komplettes HTML-Dashboard** pro Run: Teststatus, Laufzeiten, Anomalie-Erkennung, Lineage. Der Befehl kann als Post-Run-Task in Airflow ausgefuehrt werden.
+Elementary generiert mit `edr report` ein **komplettes HTML-Dashboard** pro Run: Teststatus, Laufzeiten, Anomalie-Erkennung, Lineage. Der Befehl kann als Post-Run-Task in Airflow ausgeführt werden.
 
 ### Immer-laufender Report-Task in Airflow
 
-Um einen Dokumentations-Task anzuhaengen der **unabhaengig vom Erfolg** der vorherigen Tasks laeuft, muss man von `DbtDag` auf `DbtTaskGroup` wechseln:
+Um einen Dokumentations-Task anzuhängen der **unabhängig vom Erfolg** der vorherigen Tasks läuft, muss man von `DbtDag` auf `DbtTaskGroup` wechseln:
 
 ```python
 from airflow.utils.trigger_rule import TriggerRule
@@ -853,7 +853,7 @@ with DAG("dbt_cosmos_with_reporting") as dag:
     archive = BashOperator(
         task_id="archive_artifacts",
         bash_command="...",
-        trigger_rule=TriggerRule.ALL_DONE,  # Laeuft IMMER
+        trigger_rule=TriggerRule.ALL_DONE,  # Läuft IMMER
     )
 
     report = PythonOperator(
@@ -869,17 +869,17 @@ with DAG("dbt_cosmos_with_reporting") as dag:
 
 | Rule | Verhalten | Einsatz |
 |------|-----------|---------|
-| `all_success` | Nur wenn alle Upstream-Tasks erfolgreich (Default) | Normale Abhaengigkeiten |
+| `all_success` | Nur wenn alle Upstream-Tasks erfolgreich (Default) | Normale Abhängigkeiten |
 | `all_done` | Wenn alle Upstream-Tasks fertig (egal ob success/fail/skip) | Archivierung, Reports |
-| `one_failed` | Mindestens ein Upstream-Task fehlgeschlagen | Fruehe Alarmierung |
+| `one_failed` | Mindestens ein Upstream-Task fehlgeschlagen | Frühe Alarmierung |
 | `none_failed` | Kein Upstream-Task fehlgeschlagen (skip erlaubt) | Bedingte Pfade |
 
 ### Empfehlung je nach Reifegrad
 
-| Reifegrad | Loesung | Aufwand |
+| Reifegrad | Lösung | Aufwand |
 |-----------|---------|---------|
 | **Einstieg** | `target/compiled/` manuell inspizieren + `dbt compile --select` | Kein Aufwand |
-| **Standard** | Archiv-Task in Airflow + Streamlit-Datenqualitaets-Tab (bereits vorhanden) | Niedrig |
+| **Standard** | Archiv-Task in Airflow + Streamlit-Datenqualitäts-Tab (bereits vorhanden) | Niedrig |
 | **Fortgeschritten** | dbt-artifacts Package → Run-Historie in Postgres → Trend-Dashboards | Mittel |
 | **Enterprise** | Elementary + `edr report` → HTML-Reports pro Run + Slack-Benachrichtigung | Mittel-Hoch |
 
@@ -889,7 +889,7 @@ with DAG("dbt_cosmos_with_reporting") as dag:
 
 ### Grundprinzip: Ein Branch, Environment per Variable
 
-Statt branch-per-environment (fuehrt zu Drift und Merge-Konflikten) wird empfohlen, einen einzigen `main`-Branch zu verwenden. Das Verhalten pro Umgebung wird durch Environment-Variablen gesteuert:
+Statt branch-per-environment (führt zu Drift und Merge-Konflikten) wird empfohlen, einen einzigen `main`-Branch zu verwenden. Das Verhalten pro Umgebung wird durch Environment-Variablen gesteuert:
 
 ```python
 # In jedem DAG:
@@ -898,12 +898,12 @@ ENV = os.getenv("AIRFLOW_ENV", "dev")
 
 SCHEDULES = {
     "dev": None,           # nur manuell
-    "int": "@daily",       # taeglich fuer Integrationstests
+    "int": "@daily",       # täglich für Integrationstests
     "prod": "0 6 * * *",   # 06:00 in Produktion
 }
 ```
 
-### Dateistruktur fuer Multi-Environment
+### Dateistruktur für Multi-Environment
 
 ```
 new_env/
@@ -920,7 +920,7 @@ new_env/
 │       └── docker-compose.override.yml
 ├── dbt_project/
 │   └── profiles.yml                    # Multi-Target (dev/int/prod)
-└── airflow/dags/                       # Lesen AIRFLOW_ENV fuer Verhalten
+└── airflow/dags/                       # Lesen AIRFLOW_ENV für Verhalten
 ```
 
 Start pro Umgebung:
@@ -952,7 +952,7 @@ Jede Umgebung hat eigene Credentials. Die empfohlene Methode ist `AIRFLOW_CONN_*
 | **DB-Credentials** | `AIRFLOW_CONN_*` Env-Var | `AIRFLOW_CONN_DEMO_POSTGRES=postgresql://...` |
 | **Nicht-geheime Config** | `AIRFLOW_VAR_*` Env-Var | `AIRFLOW_VAR_DBT_TARGET=prod` |
 | **Secrets** | `.env`-Datei (gitignored) | `PROD_DB_PASS=...` |
-| **Runtime-veraenderbare Werte** | Airflow Variables in der DB | Feature-Flags, Schedules |
+| **Runtime-veränderbare Werte** | Airflow Variables in der DB | Feature-Flags, Schedules |
 
 ### dbt profiles.yml: Multi-Target
 
@@ -1001,7 +1001,7 @@ northwind_vault:
 
 **Option B - Schema-Prefix (gleiche Datenbank):**
 
-Ueber ein angepasstes `generate_schema_name` Macro:
+Über ein angepasstes `generate_schema_name` Macro:
 ```sql
 {% macro generate_schema_name(custom_schema_name, node) %}
     {% set env_prefix = var('env_prefix', '') %}
@@ -1052,17 +1052,17 @@ Merge          →  Auto-Deploy DEV
                →  Manual Gate → Deploy PROD
 ```
 
-**dbt Slim CI** (nur geaenderte Modelle testen):
+**dbt Slim CI** (nur geänderte Modelle testen):
 ```bash
 # Vergleich gegen Produktions-Manifest:
 dbt build --select state:modified+ --state ./prod-artifacts/ --target int
 ```
 
-Das verkuerzt einen 10-Minuten-Full-Build auf ~30 Sekunden fuer inkrementelle Aenderungen.
+Das verkürzt einen 10-Minuten-Full-Build auf ~30 Sekunden für inkrementelle Änderungen.
 
 **DAG-Validierung in CI:**
 ```bash
-# Prueft ob alle DAGs ohne Import-Fehler parsbar sind:
+# Prüft ob alle DAGs ohne Import-Fehler parsbar sind:
 docker compose run --rm airflow-scheduler airflow dags list
 # Exit-Code != 0 bei Fehlern
 ```
@@ -1089,31 +1089,31 @@ docker compose -f docker-compose.yml -f environments/prod/docker-compose.overrid
 | **dbt Targets** | Multi-Target `profiles.yml` mit `env_var()`, gesteuert durch `DBT_TARGET` |
 | **Schema-Isolation** | Separate Datenbanken oder Schema-Prefix via Macro |
 | **Cosmos** | Environment-aware DAGs (Schedule, Connection, Target) |
-| **CI: DAGs** | `airflow dags list` fuer Parse-Check |
+| **CI: DAGs** | `airflow dags list` für Parse-Check |
 | **CI: dbt** | Slim CI mit `state:modified+` gegen Produktions-Manifest |
-| **Promotion** | Auto-Deploy DEV/INT bei Merge; manuelles Gate fuer PROD |
+| **Promotion** | Auto-Deploy DEV/INT bei Merge; manuelles Gate für PROD |
 | **Rollback** | Git-Tags pro Deploy + explizite Docker Image Tags |
 
 ---
 
-## Bekannte Einschraenkungen
+## Bekannte Einschränkungen
 
 - **AutomateDV Bridge + Effectivity Satellite**: Beide Macros sind in AutomateDV deprecated und wurden aus dem Projekt entfernt. Siehe [GitHub Issue](https://github.com/Datavault-UK/automate-dv/blob/master/macros/tables/postgres/bridge.sql).
-- **dbt Docs Server**: Nutzt `python -m http.server` statt `dbt docs serve`, da letzterer Verbindungsabbrueche auf Docker/macOS verursacht.
-- **Airflow 3 CeleryExecutor**: Die Demo nutzt CeleryExecutor + Redis + Flower. Worker koennen mit `docker compose up -d --scale airflow-worker=3` skaliert werden.
-- **Inkrementelle Loads**: Der DAG `load_delta` demonstriert Delta-Loads mit AutomateDVs eingebauter Incremental-Logik. Die Delta-CSVs in `daten/delta/` enthalten neue und geaenderte Datensaetze.
+- **dbt Docs Server**: Nutzt `python -m http.server` statt `dbt docs serve`, da letzterer Verbindungsabbrüche auf Docker/macOS verursacht.
+- **Airflow 3 CeleryExecutor**: Die Demo nutzt CeleryExecutor + Redis + Flower. Worker können mit `docker compose up -d --scale airflow-worker=3` skaliert werden.
+- **Inkrementelle Loads**: Der DAG `load_delta` demonstriert Delta-Loads mit AutomateDVs eingebauter Incremental-Logik. Die Delta-CSVs in `daten/delta/` enthalten neue und geänderte Datensätze.
 
 ---
 
 ## Ausblick: Optionale Erweiterungen
 
-### dbt-MCP - KI-gestuetzte dbt-Entwicklung
+### dbt-MCP - KI-gestützte dbt-Entwicklung
 
-[dbt-MCP](https://github.com/dbt-labs/dbt-mcp) ist ein MCP-Server (Model Context Protocol) von dbt Labs, der dbt-Funktionalitaet als strukturierte Tools fuer KI-Assistenten bereitstellt. Damit kann man z.B. in **Claude Desktop**, **VS Code Copilot Chat** oder **Cursor** per natuerlicher Sprache mit dem dbt-Projekt interagieren:
+[dbt-MCP](https://github.com/dbt-labs/dbt-mcp) ist ein MCP-Server (Model Context Protocol) von dbt Labs, der dbt-Funktionalität als strukturierte Tools für KI-Assistenten bereitstellt. Damit kann man z.B. in **Claude Desktop**, **VS Code Copilot Chat** oder **Cursor** per natürlicher Sprache mit dem dbt-Projekt interagieren:
 
 - *"Zeig mir die Lineage von mart_revenue_per_customer"*
-- *"Generiere ein YAML fuer ein neues Staging-Modell"*
-- *"Fuehre die Tests mit Tag 'quality' aus und zeig mir die Ergebnisse"*
+- *"Generiere ein YAML für ein neues Staging-Modell"*
+- *"Führe die Tests mit Tag 'quality' aus und zeig mir die Ergebnisse"*
 - *"Compiliere hub_customer und zeig mir das generierte SQL"*
 
 **Funktionsumfang ohne dbt Cloud (lokal nutzbar):**
@@ -1122,9 +1122,9 @@ docker compose -f docker-compose.yml -f environments/prod/docker-compose.overrid
 |-----------|-------------|
 | **dbt CLI** | `run`, `test`, `compile`, `show`, `parse`, `docs` - alles per Chat steuerbar |
 | **Codegen** | YAML-Definitionen und Staging-Modelle automatisch generieren |
-| **Lineage** | Abhaengigkeiten aus `manifest.json` inspizieren |
+| **Lineage** | Abhängigkeiten aus `manifest.json` inspizieren |
 
-**Funktionen die dbt Cloud voraussetzen** (nicht in dieser Demo verfuegbar):
+**Funktionen die dbt Cloud voraussetzen** (nicht in dieser Demo verfügbar):
 Discovery API (Model Health, Semantic Search), Semantic Layer (Metriken), Admin API (Job-Management), `text_to_sql`.
 
 **Setup (optional):**
@@ -1148,11 +1148,11 @@ pip install dbt-mcp
 }
 ```
 
-> **Hinweis:** dbt-MCP erlaubt KI-Assistenten, dbt-Befehle auszufuehren die Datenbank-Objekte veraendern koennen. In einer Demo-Umgebung ist das unkritisch, in Produktionsumgebungen sollte man die aktivierten Tool-Kategorien sorgfaeltig einschraenken.
+> **Hinweis:** dbt-MCP erlaubt KI-Assistenten, dbt-Befehle auszuführen die Datenbank-Objekte verändern können. In einer Demo-Umgebung ist das unkritisch, in Produktionsumgebungen sollte man die aktivierten Tool-Kategorien sorgfältig einschränken.
 
 ### PSA-Pfad mit NG Generator (optionaler alternativer Datenfluss)
 
-Die Demo enthaelt einen optionalen zweiten Pfad, der eine **Persistent Staging Area (PSA)** als stabile, historisierte Grundlage vor dbt einschiebt. Die PSA wird durch einen metadatengetriebenen Code-Generator ("NG Generator") erzeugt.
+Die Demo enthält einen optionalen zweiten Pfad, der eine **Persistent Staging Area (PSA)** als stabile, historisierte Grundlage vor dbt einschiebt. Die PSA wird durch einen metadatengetriebenen Code-Generator ("NG Generator") erzeugt.
 
 **Architektur-Vergleich:**
 ```
@@ -1161,7 +1161,7 @@ PSA-PFAD:   CSV -> Raw -> PSA (NG Gen) -> Staging (dbt) -> Raw Vault (dbt)
                           stabil!
 ```
 
-**Kernvorteil:** Der Data Vault kann jederzeit aus der PSA komplett neu aufgebaut werden, ohne auf die Quelldaten (CSV) zurueckgreifen zu muessen. Die PSA schuetzt die historischen Daten **architektonisch** (nicht nur konfigurativ via `full_refresh: false`).
+**Kernvorteil:** Der Data Vault kann jederzeit aus der PSA komplett neu aufgebaut werden, ohne auf die Quelldaten (CSV) zurückgreifen zu müssen. Die PSA schützt die historischen Daten **architektonisch** (nicht nur konfigurativ via `full_refresh: false`).
 
 **PSA-Objekte (Schema `psa`, am Beispiel `customers`):**
 
@@ -1170,14 +1170,14 @@ PSA-PFAD:   CSV -> Raw -> PSA (NG Gen) -> Staging (dbt) -> Raw Vault (dbt)
 | `v_customers_ifc` | View | Interface-Abbild der Quelle mit Typ-Casting |
 | `v_customers_cln` | View | Dedupliziert + Content-Hash (sha256) |
 | `customers_psa` | Tabelle | SCD2-historisiert (ng_valid_from/to, ng_is_current) |
-| `v_customers_cur` | View | Nur aktuelle, nicht geloeschte Version |
+| `v_customers_cur` | View | Nur aktuelle, nicht gelöschte Version |
 | `v_customers_fhi` | View | Alle Versionen (Full History) |
 | `run_customers_psa_load()` | Procedure | SCD2-Load via Hash-Vergleich |
-| `run_customers_delete_detection()` | Procedure | Markiert geloeschte Records |
+| `run_customers_delete_detection()` | Procedure | Markiert gelöschte Records |
 
 **Demo-Ablauf:**
-1. `init_raw_data` ausfuehren (CSV-Daten laden)
-2. `dbt_classic` ausfuehren (klassischer Pfad zum Vergleich)
-3. `psa_flow` ausfuehren (PSA aufbauen + Data Vault aus PSA)
+1. `init_raw_data` ausführen (CSV-Daten laden)
+2. `dbt_classic` ausführen (klassischer Pfad zum Vergleich)
+3. `psa_flow` ausführen (PSA aufbauen + Data Vault aus PSA)
 4. Im Streamlit-Tab "PSA-Pfad" die Ergebnisse vergleichen
-5. `psa_rebuild_demo` ausfuehren → beweist Vault-Rebuild aus PSA ohne CSV
+5. `psa_rebuild_demo` ausführen → beweist Vault-Rebuild aus PSA ohne CSV
