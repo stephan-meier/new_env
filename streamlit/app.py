@@ -23,13 +23,13 @@ def get_connection():
 
 # --- Navigation ---
 tab_portal, tab_quality, tab_incremental, tab_psa, tab_devtips, tab_readme = st.tabs(
-    ["Portal", "Datenqualitaet", "Inkrementelle Loads", "PSA-Pfad (NG Generator)", "Entwickler-Tipps", "Dokumentation"]
+    ["Portal", "Datenqualität", "Inkrementelle Loads", "PSA-Pfad (NG Generator)", "Entwickler-Tipps", "Dokumentation"]
 )
 
 # ==================== TAB: PORTAL ====================
 with tab_portal:
     st.title("Data Vault Demo Portal")
-    st.markdown("Zentrale Uebersicht fuer die dbt + AutomateDV + Airflow Demo-Umgebung")
+    st.markdown("Zentrale Übersicht für die dbt + AutomateDV + Airflow Demo-Umgebung")
     st.divider()
 
     # --- Service Links ---
@@ -71,10 +71,10 @@ with tab_portal:
     # --- Quick Start ---
     st.subheader("Quick Start")
     st.markdown("""
-    1. **Airflow** oeffnen und DAG `init_raw_data` triggern (laedt CSV-Daten in `raw` Schema)
+    1. **Airflow** öffnen und DAG `init_raw_data` triggern (laedt CSV-Daten in `raw` Schema)
     2. DAG `dbt_classic` oder `dbt_cosmos` triggern (baut Staging, Raw Vault und Marts)
     3. **pgAdmin** oder **DBeaver** verbinden und Schemas erkunden: `raw`, `staging`, `raw_vault`, `mart`
-    4. **dbt Docs** oeffnen fuer den Lineage Graph
+    4. **dbt Docs** öffnen für den Lineage Graph
     """)
 
     st.divider()
@@ -361,7 +361,7 @@ with tab_quality:
         if freshness_df is not None and not freshness_df.empty:
             st.divider()
             st.subheader("Source Freshness (PSA)")
-            st.caption("Ergebnisse von `dbt source freshness` - prueft ob Quelldaten aktuell sind")
+            st.caption("Ergebnisse von `dbt source freshness` - prüft ob Quelldaten aktuell sind")
             st.dataframe(freshness_df, hide_index=True, use_container_width=True)
 
         st.divider()
@@ -405,8 +405,8 @@ with tab_quality:
         st.markdown("""
         Der Test `expect_column_pair_values_A_to_be_greater_than_B` hat aufgedeckt,
         dass zahlreiche Bestellungen ein Versanddatum **vor** dem Bestelldatum haben.
-        Das ist ein fachliches Datenqualitaetsproblem, das Standard-Tests (`not_null`, `unique`)
-        nie finden wuerden.
+        Das ist ein fachliches Datenqualitätsproblem, das Standard-Tests (`not_null`, `unique`)
+        nie finden würden.
         """)
 
         @st.cache_data(ttl=30)
@@ -440,7 +440,7 @@ with tab_quality:
             with col_d1:
                 st.metric("Betroffene Bestellungen", len(bad_orders))
             with col_d2:
-                st.metric("Max. Tage zu frueh", int(bad_orders["tage_zu_frueh"].max()))
+                st.metric("Max. Tage zu früh", int(bad_orders["tage_zu_frueh"].max()))
             st.dataframe(bad_orders.head(20), use_container_width=True, hide_index=True)
             if len(bad_orders) > 20:
                 st.caption(f"Zeige 20 von {len(bad_orders)} betroffenen Bestellungen (sortiert nach Schwere)")
