@@ -445,12 +445,12 @@ with tab_quality:
             if len(bad_orders) > 20:
                 st.caption(f"Zeige 20 von {len(bad_orders)} betroffenen Bestellungen (sortiert nach Schwere)")
         else:
-            st.info("Keine Anomalien gefunden oder noch kein Test-Lauf ausgefuehrt.")
+            st.info("Keine Anomalien gefunden oder noch kein Test-Lauf ausgeführt.")
 
     else:
         st.info(
             "Keine Test-Resultate gefunden. Bitte zuerst `dbt_classic` oder `load_delta` "
-            "ausfuehren - die DAGs enthalten `dbt test --store-failures`."
+            "ausführen - die DAGs enthalten `dbt test --store-failures`."
         )
 
 # ==================== TAB: INKREMENTELLE LOADS ====================
@@ -458,8 +458,8 @@ with tab_incremental:
     st.title("Inkrementelle Loads im Data Vault")
     st.markdown("""
     Diese Seite zeigt, wie AutomateDV mit **inkrementellen Loads** umgeht.
-    Der DAG `load_delta` laedt Delta-CSVs (neue + geaenderte Datensaetze)
-    in die bestehenden Raw-Tabellen und fuehrt dann `dbt run` **ohne** `--full-refresh` aus.
+    Der DAG `load_delta` lädt Delta-CSVs (neue + geänderte Datensaetze)
+    in die bestehenden Raw-Tabellen und führt dann `dbt run` **ohne** `--full-refresh` aus.
     """)
     st.divider()
 
@@ -485,7 +485,7 @@ with tab_incremental:
         st.markdown("""
         - Neue Beziehung → INSERT
         - Bestehende Kombination → ignoriert
-        - Links wachsen nur bei neuen Verknuepfungen
+        - Links wachsen nur bei neuen Verknüpfungen
         """)
 
     st.divider()
@@ -495,7 +495,7 @@ with tab_incremental:
     st.markdown("""
     | Datei | Inhalt | Effekt |
     |-------|--------|--------|
-    | `CUSTOMERS_DELTA.csv` | 3 neue + 2 geaenderte Kunden | Hub: +3, Sat: +5 (3 neue + 2 neue Versionen) |
+    | `CUSTOMERS_DELTA.csv` | 3 neue + 2 geänderte Kunden | Hub: +3, Sat: +5 (3 neue + 2 neue Versionen) |
     | `ORDERS_DELTA.csv` | 5 neue Bestellungen | Hub: +5, Links: +5 je, Sat: +5 |
     | `ORDER_DETAILS_DELTA.csv` | 8 Positionen | Link Order-Product: +8, Sat: +8 |
     """)
@@ -528,7 +528,7 @@ with tab_incremental:
     if vault_stats is not None and not vault_stats.empty:
         st.dataframe(vault_stats, use_container_width=True, hide_index=True)
     else:
-        st.info("Keine Raw Vault Tabellen gefunden. Bitte zuerst dbt_classic oder dbt_cosmos ausfuehren.")
+        st.info("Keine Raw Vault Tabellen gefunden. Bitte zuerst dbt_classic oder dbt_cosmos ausführen.")
 
     st.divider()
 
@@ -570,7 +570,7 @@ with tab_incremental:
         if len(sat_history) > 5:
             st.success(
                 f"Historisierung sichtbar: {len(sat_history)} Zeilen fuer 5 Kunden "
-                f"(2 geaenderte mit je 2 Versionen + 3 neue)"
+                f"(2 geänderte mit je 2 Versionen + 3 neue)"
             )
     else:
         st.info(
@@ -583,12 +583,12 @@ with tab_incremental:
     # --- Demo-Anleitung ---
     st.subheader("Demo-Ablauf")
     st.markdown("""
-    1. **`init_raw_data`** triggern → laedt Batch 1 (Initialdaten) in `raw`
+    1. **`init_raw_data`** triggern → lädt Batch 1 (Initialdaten) in `raw`
     2. **`dbt_classic`** triggern → baut den kompletten Data Vault auf
-    3. Hier den **Vault-Status** pruefen (Zeilen zaehlen)
-    4. **`load_delta`** triggern → laedt Batch 2 (Delta) + inkrementeller dbt run
-    5. **Vault-Status erneut pruefen** → Satellites sind gewachsen, Hubs nur minimal
-    6. **Historisierung** unten pruefen → Kunden 1+2 haben je 2 Versionen
+    3. Hier den **Vault-Status** prüfen (Zeilen zählen)
+    4. **`load_delta`** triggern → lädt Batch 2 (Delta) + inkrementeller dbt run
+    5. **Vault-Status erneut prüfen** → Satellites sind gewachsen, Hubs nur minimal
+    6. **Historisierung** unten prüfen → Kunden 1+2 haben je 2 Versionen
     """)
 
 # ==================== TAB: PSA-PFAD (NG GENERATOR) ====================
@@ -622,14 +622,14 @@ with tab_psa:
             "  -> Marts (dbt table)\n"
             "\n"
             "Historisierung: bereits in der PSA!\n"
-            "Schutz: architektonisch (PSA unabhaengig von dbt)",
+            "Schutz: architektonisch (PSA unabhängig von dbt)",
             language=None,
         )
 
     st.success(
         "**Kernvorteil:** Die PSA ist eine stabile, historisierte Grundlage. "
         "Der Data Vault kann jederzeit aus der PSA neu aufgebaut werden - "
-        "ohne Zurueckgreifen auf die Quelldaten (CSV). "
+        "ohne Zurückgreifen auf die Quelldaten (CSV). "
         "Das ist architektonischer Schutz statt nur Konfiguration."
     )
 
@@ -713,11 +713,11 @@ with tab_psa:
                 df_hist = pd.DataFrame(rows, columns=cols)
                 st.dataframe(df_hist, use_container_width=True, hide_index=True)
             else:
-                st.info("Keine Daten in der PSA. Bitte zuerst den DAG 'psa_flow' ausfuehren.")
+                st.info("Keine Daten in der PSA. Bitte zuerst den DAG 'psa_flow' ausführen.")
 
         else:
             st.warning(
-                "PSA noch nicht initialisiert. Bitte folgende Schritte ausfuehren:\n\n"
+                "PSA noch nicht initialisiert. Bitte folgende Schritte ausführen:\n\n"
                 "1. DAG `init_raw_data` triggern (Rohdaten laden)\n"
                 "2. DAG `psa_flow` triggern (PSA aufbauen)"
             )
@@ -731,20 +731,20 @@ with tab_psa:
     # --- Demo-Workflow ---
     st.subheader("Demo-Workflow")
     st.markdown("""
-    **Schritt 1:** DAG `init_raw_data` ausfuehren (CSV-Daten in Raw laden)
+    **Schritt 1:** DAG `init_raw_data` ausführen (CSV-Daten in Raw laden)
 
-    **Schritt 2:** DAG `dbt_classic` ausfuehren (klassischer Pfad aufbauen)
+    **Schritt 2:** DAG `dbt_classic` ausführen (klassischer Pfad aufbauen)
 
-    **Schritt 3:** DAG `psa_flow` ausfuehren (PSA-Pfad aufbauen)
+    **Schritt 3:** DAG `psa_flow` ausführen (PSA-Pfad aufbauen)
 
     **Schritt 4:** In diesem Tab die Ergebnisse vergleichen:
     - Gleiche Zeilenzahlen in Hub/Satellite = PSA-Pfad produziert identisches Ergebnis
-    - PSA hat zusaetzlich: SCD2-History, Delete Detection, Content-Hash
+    - PSA hat zusätzlich: SCD2-History, Delete Detection, Content-Hash
 
-    **Schritt 5 (Highlight):** DAG `psa_rebuild_demo` ausfuehren:
+    **Schritt 5 (Highlight):** DAG `psa_rebuild_demo` ausführen:
     - Droppt die PSA-Vault-Tabellen (hub_customer_psa, sat_customer_psa)
     - Baut sie aus der PSA neu auf (dbt run --full-refresh)
-    - Beweist: **kein Datenverlust**, kein Zurueckgreifen auf CSV noetig
+    - Beweist: **kein Datenverlust**, kein Zurückgreifen auf CSV nötig
     """)
 
     st.divider()
@@ -762,9 +762,9 @@ with tab_psa:
     | `customers_psa` | Tabelle | PSA: SCD2-historisiert (ng_valid_from/to) |
     | `v_customers_cur` | View | Aktuelle Version (ng_is_current = 1) |
     | `v_customers_fhi` | View | Full History (alle Versionen) |
-    | `v_customers_del` | View | Geloeschte Records |
+    | `v_customers_del` | View | Gelöschte Records |
     | `run_customers_psa_load()` | Procedure | SCD2-Load via Content-Hash-Vergleich |
-    | `run_customers_delete_detection()` | Procedure | Markiert fehlende Records als geloescht |
+    | `run_customers_delete_detection()` | Procedure | Markiert fehlende Records als gelöscht |
 
     **Vorteil der Codegenerierung:** Alle Tabellen folgen demselben Muster.
     Fuer 100 Quellen aendert sich nur die YAML-Metadaten-Datei, nicht der Code.
@@ -773,14 +773,14 @@ with tab_psa:
 # ==================== TAB: ENTWICKLER-TIPPS ====================
 with tab_devtips:
     st.title("Entwickler-Tipps")
-    st.markdown("Hinweise fuer die lokale Entwicklung mit dieser Demo-Umgebung.")
+    st.markdown("Hinweise für die lokale Entwicklung mit dieser Demo-Umgebung.")
     st.divider()
 
     # --- Lokales dbt Setup ---
     st.subheader("1. Lokales dbt Setup (venv oder Conda)")
     st.markdown("""
-    Fuer die Entwicklung mit VSCode und **dbt Power User** braucht man dbt lokal
-    installiert. Die Docker-Container reichen dafuer nicht - die Extension ruft
+    Für die Entwicklung mit VSCode und **dbt Power User** braucht man dbt lokal
+    installiert. Die Docker-Container reichen dafür nicht - die Extension ruft
     `dbt compile`, `dbt parse` und Autocomplete direkt auf.
     """)
     col_venv, col_conda = st.columns(2)
@@ -836,7 +836,7 @@ with tab_devtips:
             "dbt Autocomplete, Lineage-Preview, Compile-on-Save, Go-to-Definition",
             "SQL Linting und Formatting (konfigurierbar fuer dbt/Jinja)",
             "YAML-Validierung fuer dbt Schema-Dateien",
-            "Python-Interpreter fuer venv/Conda, Debugging",
+            "Python-Interpreter für venv/Conda, Debugging",
             "CSV-Dateien farblich hervorgehoben (Seeds, Delta-CSVs)",
             "Docker-Container verwalten, Logs anzeigen",
             "Git-Blame, Diff-Ansicht, History",
@@ -884,8 +884,8 @@ with tab_devtips:
     st.divider()
 
     # --- Nützliche dbt-Befehle ---
-    st.subheader("4. Nuetzliche dbt-Befehle")
-    st.markdown("Lokal ausfuehren (im `dbt_project/`-Verzeichnis mit aktiviertem venv):")
+    st.subheader("4. Nützliche dbt-Befehle")
+    st.markdown("Lokal ausführen (im `dbt_project/`-Verzeichnis mit aktiviertem venv):")
     commands = {
         "Befehl": [
             "dbt debug",
@@ -900,16 +900,16 @@ with tab_devtips:
             "dbt parse",
         ],
         "Beschreibung": [
-            "Verbindung und Konfiguration pruefen",
-            "Alle Modelle kompilieren (ohne auszufuehren) - zeigt SQL in target/compiled/",
-            "Ein einzelnes Modell ausfuehren",
-            "Alle Modelle einer Schicht ausfuehren",
-            "Ein Modell mit allen Upstream-Abhaengigkeiten ausfuehren (+)",
-            "Nur Tests mit bestimmtem Tag ausfuehren",
-            "Tests ausfuehren und fehlerhafte Zeilen in DB speichern",
+            "Verbindung und Konfiguration prüfen",
+            "Alle Modelle kompilieren (ohne auszuführen) - zeigt SQL in target/compiled/",
+            "Ein einzelnes Modell ausführen",
+            "Alle Modelle einer Schicht ausführen",
+            "Ein Modell mit allen Upstream-Abhaengigkeiten ausführen (+)",
+            "Nur Tests mit bestimmtem Tag ausführen",
+            "Tests ausführen und fehlerhafte Zeilen in DB speichern",
             "Dokumentation generieren und lokal anzeigen (Port 8080)",
             "Packages installieren (automate_dv, dbt_expectations)",
-            "Manifest generieren (noetig fuer Cosmos nach Modellaenderungen)",
+            "Manifest generieren (nötig fuer Cosmos nach Modelländerungen)",
         ],
     }
     st.dataframe(pd.DataFrame(commands), use_container_width=True, hide_index=True)
@@ -917,10 +917,10 @@ with tab_devtips:
     st.divider()
 
     # --- Cosmos Manifest aktualisieren ---
-    st.subheader("5. Nach Modellaenderungen: Cosmos Manifest aktualisieren")
+    st.subheader("5. Nach Modelländerungen: Cosmos Manifest aktualisieren")
     st.markdown("""
     Der `dbt_cosmos` DAG verwendet `LoadMode.DBT_MANIFEST` und liest ein
-    vorbereitetes `manifest.json`. Nach Aenderungen an den dbt-Modellen
+    vorbereitetes `manifest.json`. Nach Änderungen an den dbt-Modellen
     muss dieses Manifest aktualisiert werden:
     """)
     st.code(
@@ -944,7 +944,7 @@ with tab_devtips:
     # --- Neues Data Vault Modell anlegen ---
     st.subheader("6. Neues Data Vault Modell anlegen")
     st.markdown("""
-    Workflow fuer ein neues Hub/Link/Satellite mit AutomateDV:
+    Workflow für ein neues Hub/Link/Satellite mit AutomateDV:
 
     **Schritt 1:** Staging-Modell erstellen (`models/staging/stg_neue_quelle.sql`)
     - `automate_dv.stage()` Macro verwenden
@@ -955,16 +955,16 @@ with tab_devtips:
     - `automate_dv.hub()`, `.link()` oder `.sat()` Macro verwenden
     - `ref()` auf das Staging-Modell
 
-    **Schritt 3:** Tests und Dokumentation in `_raw_vault__models.yml` ergaenzen
+    **Schritt 3:** Tests und Dokumentation in `_raw_vault__models.yml` ergänzen
 
     **Schritt 4:** Testen
     """)
     st.code(
-        "# Staging kompilieren und pruefen:\n"
+        "# Staging kompilieren und prüfen:\n"
         "dbt compile --select stg_neue_quelle\n"
         "# In target/compiled/ das SQL pruefen\n"
         "\n"
-        "# Modell ausfuehren:\n"
+        "# Modell ausführen:\n"
         "dbt run --select +hub_neue_entitaet\n"
         "\n"
         "# Tests laufen lassen:\n"
@@ -975,11 +975,11 @@ with tab_devtips:
     st.divider()
 
     # --- dbt-MCP: KI-gestuetzte Entwicklung ---
-    st.subheader("7. Ausblick: dbt-MCP (KI-gestuetzte dbt-Entwicklung)")
+    st.subheader("7. Ausblick: dbt-MCP (KI-gestützte dbt-Entwicklung)")
     st.markdown("""
     [dbt-MCP](https://github.com/dbt-labs/dbt-mcp) ist ein MCP-Server von dbt Labs,
-    der dbt-Funktionalitaet fuer KI-Assistenten bereitstellt. Damit kann man in
-    **Claude Desktop**, **VS Code Copilot Chat** oder **Cursor** per natuerlicher
+    der dbt-Funktionalität fuer KI-Assistenten bereitstellt. Damit kann man in
+    **Claude Desktop**, **VS Code Copilot Chat** oder **Cursor** per natürlicher
     Sprache mit dem dbt-Projekt interagieren.
     """)
 
@@ -1021,9 +1021,9 @@ with tab_devtips:
             language="json",
         )
         st.warning(
-            "dbt-MCP erlaubt KI-Assistenten, dbt-Befehle auszufuehren die "
-            "Datenbank-Objekte veraendern koennen. In einer Demo-Umgebung "
-            "unkritisch, in Produktion Tool-Kategorien sorgfaeltig einschraenken."
+            "dbt-MCP erlaubt KI-Assistenten, dbt-Befehle auszuführen die "
+            "Datenbank-Objekte verändern koennen. In einer Demo-Umgebung "
+            "unkritisch, in Produktion Tool-Kategorien sorgfaeltig einschränken."
         )
 
     st.divider()
@@ -1035,23 +1035,23 @@ with tab_devtips:
             "dbt kann sich nicht mit Postgres verbinden",
             "Airflow DAG erscheint nicht in der UI",
             "Cosmos DAG zeigt alte Modelle",
-            "dbt test schlaegt fehl mit 'relation does not exist'",
-            "Container startet nicht / haengt",
-            "dbt Power User zeigt keine Autocomplete-Vorschlaege",
+            "dbt test schlägt fehl mit 'relation does not exist'",
+            "Container startet nicht / hängt",
+            "dbt Power User zeigt keine Autocomplete-Vorschläge",
         ],
         "Loesung": [
             "Docker-Container laufen? `docker compose ps` → Postgres muss 'healthy' sein. "
-            "Lokal: `dbt debug --profiles-dir .` ausfuehren.",
-            "DAG-Processor braucht bis zu 30s. Syntax pruefen: "
+            "Lokal: `dbt debug --profiles-dir .` ausführen.",
+            "DAG-Processor braucht bis zu 30s. Syntax prüfen: "
             "`docker compose exec airflow-scheduler python -c \"exec(open('/opt/airflow/dags/datei.py').read())\"` ",
-            "`dbt parse` lokal ausfuehren, dann `docker compose build airflow-init && docker compose up -d`",
-            "Zuerst `dbt run --select staging` ausfuehren, dann Raw Vault. "
-            "Oder: `dbt run --full-refresh` fuer einen Neuaufbau.",
-            "`docker compose logs <service>` pruefen. "
+            "`dbt parse` lokal ausführen, dann `docker compose build airflow-init && docker compose up -d`",
+            "Zuerst `dbt run --select staging` ausführen, dann Raw Vault. "
+            "Oder: `dbt run --full-refresh` für einen Neuaufbau.",
+            "`docker compose logs <service>` prüfen. "
             "Neustart: `docker compose restart <service>`. "
             "Komplett neu: `docker compose down && docker compose up -d --build`",
             "Python-Interpreter auf venv setzen (Cmd+Shift+P → 'Python: Select Interpreter'). "
-            "`dbt deps` lokal ausfuehren. VSCode neu starten.",
+            "`dbt deps` lokal ausführen. VSCode neu starten.",
         ],
     }
     st.dataframe(pd.DataFrame(troubles), use_container_width=True, hide_index=True)
