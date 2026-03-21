@@ -14,11 +14,11 @@ Ein vollständiges Data-Vault-Modell auf Basis eines Northwind-ähnlichen Bestel
 | **Raw Vault** | `raw_vault` | 4 Hubs, 3 Links, 5 Satellites, 2 PIT-Tabellen |
 | **Marts** | `mart` | 3 Business-Tabellen (Umsatz/Kunde, Bestellübersicht, Produktverkäufe) |
 
-### Airflow-Orchestrierung: Klassisch vs. Cosmos
-Zwei alternative Ansätze im direkten Vergleich:
+### Airflow-Orchestrierung: Drei Ansätze im Vergleich
 
 - **`dbt_classic`** - BashOperator-Kette: `dbt deps` → `dbt seed` → `dbt run` (staging → raw_vault → marts) → `dbt test`. Einfach, aber ein Task pro Phase.
-- **`dbt_cosmos`** - Astronomer Cosmos parst das dbt-Projekt automatisch und erstellt **43 individuelle Airflow-Tasks** mit vollständigem Dependency-Graph. Retry und Monitoring auf Modell-Ebene.
+- **`dbt_cosmos`** - Astronomer Cosmos parst das dbt-Projekt automatisch und erstellt **43 individuelle Airflow-Tasks** mit vollständigem Dependency-Graph. Retry und Monitoring auf Modell-Ebene. https://astronomer.github.io/astronomer-cosmos/index.html
+- **`cosmos_master` → `cosmos_orders` → `cosmos_marts`** - Aufgeteilte Cosmos-DAGs pro fachlicher Domain, verkettet über **Airflow Datasets**. Mit **DatasetOrTimeSchedule** (Cron-Fallback) und **Freshness-Checks** für robuste Pipelines. Siehe [Demo: DAG-Splitting mit Datasets](#demo-dag-splitting-mit-datasets-cosmos_split).
 
 ### Quelldaten
 Northwind-ähnliches Bestellsystem mit 5 Tabellen:
@@ -116,7 +116,9 @@ docker compose down -v
 
 ## Demo-Ablauf
 
-### 1. Rohdaten laden
+Die Demo besteht aus **5 aufbauenden Szenarien**. Szenarien 1-3 sind Alternativen (gleicher Effekt, unterschiedliche Orchestrierung). Szenarien 4-5 sind Erweiterungen.
+
+### Grundlage: Rohdaten laden
 In der Airflow UI den DAG **`init_raw_data`** triggern. Dieser:
 - Löscht alle bestehenden Raw-Tabellen (idempotent)
 - Erstellt die Tabellen neu (Postgres-DDL)
@@ -124,7 +126,7 @@ In der Airflow UI den DAG **`init_raw_data`** triggern. Dieser:
 
 → Ergebnis in pgAdmin prüfen: `raw.customers`, `raw.orders`, etc.
 
-### 2. Data Vault aufbauen (Variante A: Klassisch)
+### Szenario 1: Klassisch (BashOperator)
 DAG **`dbt_classic`** triggern:
 - `dbt seed` lädt CSV-Daten als Alternative in Raw-Schema
 - `dbt run --select staging` erstellt Staging-Views mit Hash-Keys
@@ -132,16 +134,38 @@ DAG **`dbt_classic`** triggern:
 - `dbt run --select marts` erstellt Business-Tabellen
 - `dbt test` validiert alle Modelle
 
-### 3. Data Vault aufbauen (Variante B: Cosmos)
+→ **Zeigt:** Einfacher, sequentieller Ansatz. Ein Task pro Phase. So fängt jeder an.
+
+### Szenario 2: Cosmos (monolithisch)
 DAG **`dbt_cosmos`** triggern:
 - Cosmos parst das dbt-Projekt automatisch
 - Jedes dbt-Modell wird ein eigener Airflow-Task
 - Der Dependency-Graph ist in der Airflow UI sichtbar
 - 43 Tasks mit vollständiger Parallelisierung
 
-### 4. Inkrementellen Delta-Load ausführen
-DAG **`load_delta`** triggern:
-- **Kein DROP** - die Delta-CSVs werden per COPY in die bestehenden Raw-Tabellen **angehängt**
+→ **Zeigt:** Gleicher Effekt wie Szenario 1, aber mit automatischem Task-Graph. Retry und Monitoring auf Modell-Ebene.
+
+### Szenario 3: Cosmos Split (Domain-DAGs mit Datasets)
+DAG **`cosmos_master`** manuell triggern:
+- Baut nur Stammdaten auf (Kunden, Mitarbeiter, Produkte)
+- Publiziert `Dataset("dbt://domain_master")`
+- **`cosmos_orders`** startet **automatisch** (Dataset-Trigger oder Cron-Fallback 06:00)
+  - Freshness-Check: Sind Stammdaten frisch? Warnung wenn nicht, aber kein Abbruch
+  - Baut Bestellungen, Links, PITs auf
+  - Publiziert `Dataset("dbt://domain_orders")`
+- **`cosmos_marts`** startet **automatisch** (Dataset-Trigger oder Cron-Fallback 07:00)
+  - Baut Business-Tabellen auf
+
+→ **Zeigt:** Domain-Trennung, Dataset-Verkettung, Cron-Fallback, Graceful Degradation. Siehe [Demo: DAG-Splitting mit Datasets](#demo-dag-splitting-mit-datasets-cosmos_split) und Streamlit Tab "DAG-Splitting".
+
+In der **Airflow UI** sieht man:
+- **Datasets-Tab:** Die Kette `dbt://domain_master` → `dbt://domain_orders`
+- **Graph View** von `cosmos_orders`: Den Freshness-Check-Branch
+- **DAG-Runs:** Drei separate Läufe mit unabhängigem Status
+
+### Szenario 4a: Delta-Load klassisch
+DAG **`load_delta`** triggern (setzt Szenario 1, 2 oder 3 voraus):
+- **Kein DROP** - die Delta-CSVs werden per UPSERT in die bestehenden Raw-Tabellen eingefügt
 - `dbt run` läuft **ohne** `--full-refresh`, sodass AutomateDVs Incremental-Logik greift:
   - Hubs: nur neue Business Keys werden eingefügt
   - Satellites: nur geänderte Hashdiffs erzeugen neue Versionen (Historisierung!)
@@ -156,7 +180,48 @@ DAG **`load_delta`** triggern:
 
 → Im **Streamlit Portal** (Tab "Inkrementelle Loads") können die Vorher/Nachher-Zahlen und die Satellite-Historisierung live geprüft werden.
 
-### 5. Ergebnisse erkunden
+### Szenario 4b: Delta-Load + Split-Kette
+DAG **`load_delta_split`** triggern (setzt Szenario 3 voraus):
+- Gleiche UPSERT-Logik wie 4a
+- **Kein eigener dbt-Lauf** — stattdessen publiziert der DAG ein Dataset
+- Die **gesamte Cosmos-Split-Kette** startet automatisch:
+  `cosmos_master` → `cosmos_orders` → `cosmos_marts`
+
+→ **Unterschied zu 4a:** Der dbt-Teil wird von den Domain-DAGs übernommen, nicht vom Delta-DAG selbst. Jede Domain testet ihre eigenen Modelle separat.
+
+### Szenario 5a: PSA klassisch (BashOperator)
+1. DAG **`psa_flow`** triggern (setzt `init_raw_data` voraus):
+   - Baut die Persistent Staging Area auf (SCD2, Delete Detection)
+   - Baut einen alternativen Data Vault aus der PSA via `dbt run --select tag:psa`
+2. DAG **`psa_rebuild_demo`** triggern:
+   - Droppt die PSA-Vault-Tabellen
+   - Baut sie aus der PSA komplett neu auf
+   - **Beweist:** Kein Datenverlust, kein Zurückgreifen auf CSV nötig
+
+→ Im **Streamlit Portal** (Tab "PSA-Pfad") die Side-by-Side-Vergleiche und SCD2-Historie einsehen.
+
+### Szenario 5b: PSA + Cosmos (produktionsnahe Variante)
+DAG **`psa_cosmos_flow`** triggern (setzt `init_raw_data` voraus):
+1. **NG Generator** (BashOperator): PSA-Objekte erstellen, SCD2-Load, Delete Detection
+2. **Cosmos TaskGroup** (tag:psa): Staging + Vault aus PSA mit individuellen Tasks pro Modell
+3. **Dataset publizieren**: `Dataset("dbt://psa_loaded")`
+4. **`cosmos_master`** startet **automatisch** (Dataset-Trigger) → baut Stammdaten
+5. **`cosmos_orders`** startet **automatisch** (Dataset-Trigger) → baut Bestellungen
+6. **`cosmos_marts`** startet **automatisch** (Dataset-Trigger) → baut Marts
+
+→ **Volle Dataset-Kette:** `dbt://psa_loaded` → `dbt://domain_master` → `dbt://domain_orders`
+
+Das ist die **produktionsnahe Architektur**: PSA als stabile Vorstufe (NG Generator), Cosmos für den dbt-Teil, Datasets für die Verkettung. Der Unterschied zu 5a:
+
+| Aspekt | `psa_flow` (5a) | `psa_cosmos_flow` (5b) |
+|--------|-----------------|----------------------|
+| dbt-Ausführung | Ein BashOperator (`dbt run --select tag:psa`) | Cosmos TaskGroup (individuelle Tasks) |
+| Nachfolge-DAGs | Keine (standalone) | Triggert die gesamte Split-Kette via Datasets |
+| Retry | Gesamter dbt-Lauf | Pro Modell einzeln |
+| Monitoring | Ein Task-Status | Pro Modell sichtbar im Graph |
+
+### Ergebnisse erkunden
+- **Streamlit Portal** (localhost:8572): Zentrale Übersicht mit allen Tabs
 - **pgAdmin** (localhost:5050): SQL-Abfragen auf alle Schemas
 - **dbt Docs** (localhost:8081): Lineage-Graph und Modell-Dokumentation
 - **DBeaver**: Direktverbindung zu PostgreSQL
@@ -378,7 +443,7 @@ new_env/
 │   ├── models/raw_vault/       # 4 Hubs, 3 Links, 5 Sats, 2 PITs
 │   └── models/marts/           # 3 Business-Tabellen
 ├── airflow/
-│   ├── dags/                   # 4 DAGs (init, classic, cosmos, delta)
+│   ├── dags/                   # 11 DAGs (init, classic, cosmos, cosmos_split x3, delta x2, psa x3)
 │   └── config/airflow.cfg      # Shared Secrets für JWT-Auth
 ├── postgres/init/              # DB-Init-Scripte (Schemas)
 └── streamlit/                  # Portal-App
@@ -1093,6 +1158,282 @@ docker compose -f docker-compose.yml -f environments/prod/docker-compose.overrid
 | **CI: dbt** | Slim CI mit `state:modified+` gegen Produktions-Manifest |
 | **Promotion** | Auto-Deploy DEV/INT bei Merge; manuelles Gate für PROD |
 | **Rollback** | Git-Tags pro Deploy + explizite Docker Image Tags |
+
+---
+
+## Demo: DAG-Splitting mit Datasets (cosmos_split)
+
+### Überblick
+
+Diese Demo zeigt den Unterschied zwischen einem **monolithischen Cosmos-DAG** (`dbt_cosmos` - alle 43 Tasks in einem DAG) und einer **aufgeteilten Version** (3 DAGs mit Dataset-Dependencies). In der Praxis mit 100+ DAGs ist die aufgeteilte Variante Standard.
+
+**Vergleich auf einen Blick:**
+
+| Aspekt | `dbt_cosmos` (monolithisch) | `cosmos_master` → `cosmos_orders` → `cosmos_marts` (split) |
+|--------|---------------------------|-----------------------------------------------------------|
+| **Anzahl DAGs** | 1 | 3 |
+| **Trigger** | Manuell | Dataset-Kette + Cron-Fallback |
+| **Parallelität** | Innerhalb eines DAG | Über DAG-Grenzen hinweg |
+| **Fehler-Isolation** | Ein Fehler stoppt alles | Nur die betroffene Domain stoppt |
+| **Skalierung** | Ein Worker-Pool | Verschiedene Pools pro Domain möglich |
+| **Monitoring** | Eine Statusanzeige | Pro Domain separat überwachbar |
+| **Retry** | Gesamter Graph oder manuell | Pro Domain unabhängig |
+
+### Architektur
+
+```
+┌────────────────────┐     Dataset: dbt://domain_master     ┌────────────────────┐     Dataset: dbt://domain_orders     ┌────────────────────┐
+│   cosmos_master    │ ─────────────────────────────────────►│   cosmos_orders    │ ─────────────────────────────────────►│   cosmos_marts     │
+│                    │                                       │                    │                                       │                    │
+│ stg_customers      │  Fallback: auch ohne Dataset          │ stg_orders         │  Fallback: auch ohne Dataset          │ mart_revenue       │
+│ stg_employees      │  um 06:00 (DatasetOrTimeSchedule)     │ stg_order_details  │  um 07:00 (DatasetOrTimeSchedule)     │ mart_orders        │
+│ stg_products       │                                       │ hub_order          │                                       │ mart_products      │
+│ hub_customer       │                                       │ alle Links         │  Freshness-Check:                     │                    │
+│ hub_employee       │                                       │ sat_order          │  - frisch → normaler Lauf             │                    │
+│ hub_product        │                                       │ sat_order_detail   │  - veraltet → Lauf mit Warnung        │                    │
+│ sat_customer       │                                       │ pit_customer       │                                       │                    │
+│ sat_employee       │                                       │ pit_order          │  Source Freshness:                    │                    │
+│ sat_product        │                                       │                    │  - warn_after ohne error_after        │                    │
+│                    │                                       │                    │  → dokumentiert, blockiert nicht       │                    │
+│ + dbt test         │                                       │ + dbt test         │                                       │ + dbt test         │
+└────────────────────┘                                       └────────────────────┘                                       └────────────────────┘
+   DatasetOrTimeSchedule                                          DatasetOrTimeSchedule                                       DatasetOrTimeSchedule
+   (PSA-Dataset ODER 05:00)                                       (Dataset ODER 06:00)                                        (Dataset ODER 07:00)
+```
+
+**Optionale Vorstufe: PSA mit Cosmos (`psa_cosmos_flow`)**
+
+```
+┌────────────────────┐     Dataset: dbt://psa_loaded
+│  psa_cosmos_flow   │ ─────────────────────────────────► cosmos_master (s.o.)
+│                    │
+│ [BashOperator]     │   NG Generator: SQL-Procedures
+│  create_psa_objects│   (nicht dbt - daher BashOperator)
+│  create_procedures │
+│  run_psa_load      │
+│  run_delete_detect │
+│                    │
+│ [Cosmos TaskGroup] │   dbt via Cosmos (tag:psa):
+│  stg_customers_psa │   individuelle Tasks pro Modell
+│  hub_customer_psa  │
+│  sat_customer_psa  │
+│                    │
+│ + dbt test (psa)   │
+└────────────────────┘
+   schedule=None (manuell)
+```
+
+### Domain-Tags
+
+Die Aufteilung basiert auf **dbt-Tags** in `dbt_project.yml`:
+
+```yaml
+models:
+  northwind_vault:
+    staging:
+      stg_customers:
+        +tags: ["domain_master"]
+      stg_orders:
+        +tags: ["domain_orders"]
+      # ...
+    raw_vault:
+      hubs:
+        hub_customer:
+          +tags: ["domain_master"]
+        hub_order:
+          +tags: ["domain_orders"]
+      links:
+        +tags: ["domain_orders"]     # alle Links gehören zur Order-Domain
+      satellites:
+        sat_customer:
+          +tags: ["domain_master"]
+        sat_order:
+          +tags: ["domain_orders"]
+      pit:
+        +tags: ["domain_orders"]
+    marts:
+      +tags: ["consumption"]
+```
+
+Cosmos selektiert die Modelle per `select=["tag:domain_master"]` etc.
+
+### Demo-Ablauf
+
+```bash
+# 1. Umgebung neu bauen (Manifest mit Tags regenerieren)
+docker compose up -d --build
+
+# 2. Rohdaten laden
+#    In Airflow UI: init_raw_data triggern
+
+# 3a. Monolithisch: dbt_cosmos triggern → alle 43 Tasks in einem DAG
+
+# 3b. Split: cosmos_master triggern →
+#     cosmos_orders startet automatisch (Dataset-Trigger) →
+#     cosmos_marts startet automatisch (Dataset-Trigger)
+```
+
+In der **Airflow UI** sieht man:
+- Unter **Datasets** die Kette `dbt://domain_master` → `dbt://domain_orders`
+- Unter **DAGs** die drei Split-DAGs mit ihren jeweiligen Task-Graphen
+- Im **Graph View** von `cosmos_orders` den Freshness-Check-Branch
+
+### DatasetOrTimeSchedule: Der Cron-Fallback
+
+Das zentrale Pattern für robuste Pipelines mit 100+ DAGs:
+
+```python
+from airflow.timetables.datasets import DatasetOrTimeSchedule
+from airflow.timetables.trigger import CronTriggerTimetable
+
+schedule=DatasetOrTimeSchedule(
+    timetable=CronTriggerTimetable("0 6 * * *", timezone="Europe/Zurich"),
+    datasets=[MASTER_DATASET],
+)
+```
+
+**Verhalten:**
+- **Normalfall:** `cosmos_master` läuft erfolgreich → publiziert Dataset → `cosmos_orders` startet sofort
+- **Fallback:** `cosmos_master` ist nicht gelaufen (Quelle nicht geliefert, Fehler, etc.) → `cosmos_orders` startet trotzdem um 06:00 mit den bestehenden Daten
+
+Damit wird die Pipeline **nie blockiert**, auch wenn eine Quelle fehlt. Die nachfolgenden dbt-Tests und Source-Freshness-Checks dokumentieren die Veraltung.
+
+---
+
+## Graceful Degradation: Umgang mit fehlenden Quellen
+
+### Das Problem
+
+In einer Umgebung mit 100+ DAGs kommt es regelmässig vor, dass eine Quelle nicht rechtzeitig liefert. Der Produkt-Master ist nicht bereit, das CRM-System hatte Wartung, eine Datei fehlt. **Nicht jeder Ladeausfall sollte die gesamte Pipeline blockieren.**
+
+### Lösungsansätze in dieser Demo
+
+#### 1. DatasetOrTimeSchedule (in cosmos_orders und cosmos_marts)
+
+Siehe oben. Der Cron-Fallback stellt sicher, dass der DAG auch ohne Dataset-Event läuft.
+
+#### 2. Freshness-Check mit BranchPythonOperator (in cosmos_orders)
+
+```python
+def check_master_freshness(**context):
+    hook = PostgresHook(postgres_conn_id="demo_postgres")
+    result = hook.get_first(
+        "SELECT MAX(load_datetime) FROM raw_vault.hub_customer"
+    )
+    last_load = result[0] if result and result[0] else None
+    is_fresh = last_load and (datetime.now() - last_load) < timedelta(hours=12)
+
+    if is_fresh:
+        return "proceed_fresh"      # normaler Lauf
+    else:
+        return "proceed_stale"      # Lauf mit Warnung, kein Abbruch
+```
+
+**Ergebnis in der Airflow UI:**
+- **Frisch:** `check_master_freshness` → `proceed_fresh` → `dbt_orders` → Tests
+- **Veraltet:** `check_master_freshness` → `proceed_stale` (gelb/skipped) → `dbt_orders` → Tests
+
+In beiden Fällen laufen die dbt-Modelle und Tests. Die Tests **dokumentieren** den Zustand der Daten.
+
+#### 3. dbt Source Freshness mit warn_after (ohne error_after)
+
+In `_staging__sources.yml`:
+
+```yaml
+sources:
+  - name: raw
+    schema: raw
+    freshness:
+      warn_after: {count: 12, period: hour}
+      # error_after bewusst WEGGELASSEN → Exit-Code immer 0
+    loaded_at_field: "change_date"
+    tables:
+      - name: products
+        freshness:
+          warn_after: {count: 48, period: hour}   # Stammdaten dürfen älter sein
+```
+
+**Schlüsselentscheidung:** `warn_after` ohne `error_after` bedeutet:
+- `dbt source freshness` gibt Exit-Code **0** (Erfolg), auch bei veralteten Quellen
+- Veraltung wird in `target/sources.json` dokumentiert und in den dbt Docs angezeigt
+- Die Pipeline wird **nie blockiert**
+
+Würde man `error_after` hinzufügen, gäbe es Exit-Code 1 → Airflow-Task schlägt fehl → Pipeline blockiert.
+
+#### 4. trigger_rule für nachfolgende Tasks
+
+```python
+# Tests laufen IMMER, unabhängig vom Freshness-Branch
+dbt_test = BashOperator(
+    task_id="dbt_test",
+    trigger_rule="none_failed_min_one_success",
+    ...
+)
+```
+
+| trigger_rule | Verhalten | Einsatz |
+|-------------|-----------|---------|
+| `all_success` | Nur wenn alle Vorgänger erfolgreich (Default) | Normale Dependencies |
+| `none_failed_min_one_success` | Kein Vorgänger fehlgeschlagen, mind. einer erfolgreich | Nach Branches |
+| `all_done` | Alle Vorgänger fertig (egal ob Erfolg/Fehler/Skip) | Archivierung, Reports |
+| `none_failed` | Kein Fehler, Skips erlaubt | Bedingte Pfade |
+
+### Weitere Patterns für Produktionsumgebungen
+
+#### Circuit-Breaker DAG
+
+Ein dedizierter DAG der um 04:00 alle Quellen prüft und den Status als Dataset publiziert:
+
+```python
+SOURCE_CHECKS = {
+    "raw.customers": {"query": "SELECT MAX(change_date) FROM raw.customers", "max_age_hours": 12},
+    "raw.products":  {"query": "SELECT MAX(change_date) FROM raw.products",  "max_age_hours": 48},
+}
+# → Publiziert Dataset("internal://source-health-status")
+# → Downstream-DAGs lesen den Status per XCom
+```
+
+#### ExternalTaskSensor mit soft_fail=True
+
+Für Cross-DAG-Dependencies mit Timeout statt Blockade:
+
+```python
+wait_for_vault = ExternalTaskSensor(
+    task_id="wait_for_vault",
+    external_dag_id="cosmos_orders",
+    timeout=3600,           # max 1 Stunde warten
+    mode="reschedule",      # Worker-Slot freigeben während Wartezeit
+    soft_fail=True,         # Bei Timeout: SKIP statt FAIL
+)
+```
+
+#### Reusable Soft-Load TaskGroup
+
+Für 100+ DAGs lohnt es sich, das Pattern in eine wiederverwendbare TaskGroup zu extrahieren:
+
+```python
+def create_soft_load_group(group_id, load_command, freshness_query, max_age):
+    with TaskGroup(group_id=group_id) as group:
+        check = BranchPythonOperator(...)   # Freshness prüfen
+        run_load = BashOperator(...)         # Laden wenn frisch
+        skip_load = BashOperator(...)        # Warnung wenn veraltet
+        done = EmptyOperator(trigger_rule="none_failed_min_one_success")
+        check >> [run_load, skip_load] >> done
+    return group
+```
+
+### Zusammenfassung: Empfohlene Strategie
+
+| Schicht | Pattern | Bei fehlender Quelle |
+|---------|---------|---------------------|
+| **Source-Load** | Emittiert Dataset bei Erfolg | Kein Dataset-Event → kein Trigger |
+| **Core/Vault** | `DatasetOrTimeSchedule` + Freshness-Check | Cron-Fallback, Lauf mit Warnung |
+| **Consumption** | `DatasetOrTimeSchedule` + `soft_fail` Sensor | Cron-Fallback, Marts mit bestehenden Daten |
+| **dbt Sources** | `warn_after` ohne `error_after` | Warnung in Logs, kein harter Fehler |
+| **dbt Tests** | `--store-failures` + `trigger_rule=all_done` | Tests dokumentieren Veraltung |
+| **Monitoring** | Circuit-Breaker DAG um 04:00 | Zentrale Übersicht aller Quellen |
+
+> **Kernprinzip:** Fehlende Quellen sind ein **Dokumentations-Event**, kein **Fehler-Event**. Die Pipeline läuft weiter, Tests zeigen was veraltet ist, und das Monitoring alarmiert das Team. Harte Fehler gibt es nur bei technischen Problemen (DB nicht erreichbar, SQL-Fehler), nicht bei fachlichen Verspätungen.
 
 ---
 

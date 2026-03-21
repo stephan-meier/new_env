@@ -24,14 +24,56 @@ models:
     staging:
       +schema: staging
       +materialized: view
+      # Domain-Tags fuer DAG-Splitting (cosmos_split Demo)
+      stg_customers:
+        +tags: ["domain_master"]
+      stg_employees:
+        +tags: ["domain_master"]
+      stg_products:
+        +tags: ["domain_master"]
+      stg_orders:
+        +tags: ["domain_orders"]
+      stg_order_details:
+        +tags: ["domain_orders"]
+      stg_customers_psa:
+        +tags: ["psa"]
     raw_vault:
       +schema: raw_vault
       +materialized: incremental
       +full_refresh: false
+      # Domain-Tags pro Modell
+      hubs:
+        hub_customer:
+          +tags: ["domain_master"]
+        hub_employee:
+          +tags: ["domain_master"]
+        hub_product:
+          +tags: ["domain_master"]
+        hub_order:
+          +tags: ["domain_orders"]
+        hub_customer_psa:
+          +tags: ["psa"]
+      links:
+        +tags: ["domain_orders"]
+      satellites:
+        sat_customer:
+          +tags: ["domain_master"]
+        sat_employee:
+          +tags: ["domain_master"]
+        sat_product:
+          +tags: ["domain_master"]
+        sat_order:
+          +tags: ["domain_orders"]
+        sat_order_detail:
+          +tags: ["domain_orders"]
+        sat_customer_psa:
+          +tags: ["psa"]
       pit:
+        +tags: ["domain_orders"]
         +materialized: table
       bridges:
         +materialized: table
     marts:
       +schema: mart
       +materialized: table
+      +tags: ["consumption"]

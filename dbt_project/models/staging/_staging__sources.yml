@@ -3,9 +3,23 @@ version: 2
 sources:
   - name: raw
     schema: raw
+    # Freshness-Checks: warn_after OHNE error_after = nie ein harter Fehler,
+    # nur Warnungen. So dokumentiert dbt source freshness veraltete Quellen,
+    # ohne die Pipeline zu blockieren.
+    freshness:
+      warn_after: {count: 12, period: hour}
+      # error_after bewusst WEGGELASSEN -> Exit-Code immer 0
+    loaded_at_field: "change_date"
     tables:
       - name: customers
       - name: employees
       - name: orders
+        freshness:
+          warn_after: {count: 24, period: hour}
       - name: order_details
+        freshness:
+          warn_after: {count: 24, period: hour}
       - name: products
+        freshness:
+          # Stammdaten koennen aelter sein
+          warn_after: {count: 48, period: hour}

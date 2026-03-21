@@ -22,8 +22,8 @@ def get_connection():
 # st.image("/app/logo/full_r.png", width=300)
 
 # --- Navigation ---
-tab_portal, tab_quality, tab_incremental, tab_psa, tab_devtips, tab_readme = st.tabs(
-    ["Portal", "Datenqualität", "Inkrementelle Loads", "PSA-Pfad (NG Generator)", "Entwickler-Tipps", "Dokumentation"]
+tab_portal, tab_quality, tab_incremental, tab_splitting, tab_psa, tab_devtips, tab_readme = st.tabs(
+    ["Portal", "Datenqualitaet", "Inkrementelle Loads", "DAG-Splitting", "PSA-Pfad (NG Generator)", "Entwickler-Tipps", "Dokumentation"]
 )
 
 # ==================== TAB: PORTAL ====================
@@ -71,10 +71,10 @@ with tab_portal:
     # --- Quick Start ---
     st.subheader("Quick Start")
     st.markdown("""
-    1. **Airflow** öffnen und DAG `init_raw_data` triggern (laedt CSV-Daten in `raw` Schema)
+    1. **Airflow** oeffnen und DAG `init_raw_data` triggern (laedt CSV-Daten in `raw` Schema)
     2. DAG `dbt_classic` oder `dbt_cosmos` triggern (baut Staging, Raw Vault und Marts)
     3. **pgAdmin** oder **DBeaver** verbinden und Schemas erkunden: `raw`, `staging`, `raw_vault`, `mart`
-    4. **dbt Docs** öffnen für den Lineage Graph
+    4. **dbt Docs** oeffnen fuer den Lineage Graph
     """)
 
     st.divider()
@@ -153,22 +153,79 @@ with tab_portal:
     st.subheader("Airflow DAGs")
 
     dag_data = {
-        "DAG": ["init_raw_data", "dbt_classic", "dbt_cosmos", "load_delta"],
-        "Beschreibung": [
-            "DROP + CREATE raw-Tabellen, COPY CSV-Daten",
-            "dbt via BashOperator: seed -> staging -> raw_vault -> marts -> test",
-            "dbt via Astronomer Cosmos: automatischer Task-Graph (43 Tasks)",
-            "Delta-CSVs appenden + dbt incremental run (keine Full-Refresh)",
+        "DAG": [
+            "init_raw_data",
+            "dbt_classic",
+            "dbt_cosmos",
+            "cosmos_master",
+            "cosmos_orders",
+            "cosmos_marts",
+            "load_delta",
+            "load_delta_split",
+            "psa_flow",
+            "psa_cosmos_flow",
+            "psa_rebuild_demo",
         ],
-        "Trigger": ["Manuell", "Manuell", "Manuell", "Manuell"],
-        "Zweck": [
-            "Saubere (Re-)Initialisierung",
-            "Klassischer Ansatz",
-            "Moderner Ansatz (Vergleich)",
-            "Inkrementelle Loads demonstrieren",
+        "Beschreibung": [
+            "DROP + CREATE Raw-Tabellen, COPY CSV-Daten",
+            "dbt via BashOperator: seed → staging → raw_vault → marts → test",
+            "dbt via Astronomer Cosmos: automatischer Task-Graph (43 Tasks)",
+            "Domain Stammdaten (Cosmos Split): Kunden, Mitarbeiter, Produkte + dbt seed",
+            "Domain Bestellungen (Cosmos Split): Orders, Links, PITs + Freshness-Check",
+            "Consumption (Cosmos Split): Marts fuer Reporting",
+            "Delta-CSVs upserten + eigener dbt run (klassisch, standalone)",
+            "Delta-CSVs upserten + Dataset → triggert Cosmos-Split-Kette",
+            "PSA klassisch (BashOperator): NG Generator + dbt run tag:psa",
+            "PSA mit Cosmos: NG Generator + Cosmos TaskGroup + Dataset-Kette",
+            "Vault aus PSA neu aufbauen (beweist Rebuild-Faehigkeit)",
+        ],
+        "Trigger": [
+            "Manuell",
+            "Manuell",
+            "Manuell",
+            "Dataset ODER 05:00",
+            "Dataset ODER 06:00",
+            "Dataset ODER 07:00",
+            "Manuell",
+            "Manuell",
+            "Manuell",
+            "Manuell",
+            "Manuell",
+        ],
+        "Szenario": [
+            "Grundlage",
+            "1: Klassisch",
+            "2: Cosmos",
+            "3: Cosmos Split",
+            "3: Cosmos Split",
+            "3: Cosmos Split",
+            "4a: Delta klassisch",
+            "4b: Delta + Split",
+            "5a: PSA klassisch",
+            "5b: PSA + Cosmos",
+            "5: PSA Rebuild",
         ],
     }
     st.dataframe(pd.DataFrame(dag_data), use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # --- Demo-Szenarien ---
+    st.subheader("Demo-Szenarien (aufbauend)")
+    st.markdown("""
+    | # | Szenario | DAGs | Was es zeigt |
+    |---|----------|------|-------------|
+    | 1 | **Klassisch** | `init_raw_data` → `dbt_classic` | BashOperator-Kette, dbt-Basics |
+    | 2 | **Cosmos** | `init_raw_data` → `dbt_cosmos` | Gleicher Effekt, 43 Tasks mit Auto-Graph |
+    | 3 | **Cosmos Split** | `init_raw_data` → `cosmos_master` → *(auto)* → *(auto)* | Domain-Trennung, Datasets, Cron-Fallback |
+    | 4a | **Delta klassisch** | `load_delta` | Upsert + eigener dbt run (standalone) |
+    | 4b | **Delta + Split** | `load_delta_split` → *(auto)* Split-Kette | Upsert + Dataset → Cosmos-Kette |
+    | 5a | **PSA klassisch** | `psa_flow` → `psa_rebuild_demo` | Architektonischer Schutz, BashOperator |
+    | 5b | **PSA + Cosmos** | `psa_cosmos_flow` → *(auto)* ganze Split-Kette | PSA als Vorstufe + Cosmos + Dataset-Kette |
+
+    Szenarien 1-3 sind **Alternativen** (gleicher Effekt, unterschiedliche Orchestrierung).
+    Szenarien 4a/4b und 5a/5b zeigen jeweils die **klassische und die Split-Variante**.
+    """)
 
 # ==================== TAB: DATENQUALITAET ====================
 with tab_quality:
@@ -181,7 +238,12 @@ with tab_quality:
     st.divider()
 
     # --- run_results.json parsen ---
-    RUN_RESULTS_PATH = Path("/usr/app/dbt/target/run_results.json")
+    # Klassische DAGs schreiben nach target/run_results.json,
+    # Split-DAGs nach target/<domain>/run_results.json.
+    # Wir lesen alle vorhandenen Dateien zusammen.
+    TARGET_DIR = Path("/usr/app/dbt/target")
+    RUN_RESULTS_PATH = TARGET_DIR / "run_results.json"
+    DOMAIN_DIRS = ["domain_master", "domain_orders", "consumption", "psa"]
 
     def _readable_test_name(uid):
         """Erzeugt einen lesbaren Testnamen aus der unique_id."""
@@ -261,18 +323,26 @@ with tab_quality:
                     return "_".join(model_parts[:2])
         return ""
 
-    def load_run_results():
-        if not RUN_RESULTS_PATH.exists():
-            return None, None
-        with open(RUN_RESULTS_PATH) as f:
+    def _collect_run_results_files():
+        """Sammelt alle run_results.json: klassisch + pro Domain."""
+        files = []
+        if RUN_RESULTS_PATH.exists():
+            files.append(("klassisch", RUN_RESULTS_PATH))
+        for domain in DOMAIN_DIRS:
+            p = TARGET_DIR / domain / "run_results.json"
+            if p.exists():
+                files.append((domain, p))
+        return files
+
+    def _parse_single_run_results(path, source_label):
+        """Parst eine einzelne run_results.json und gibt (rows, timestamp) zurueck."""
+        with open(path) as f:
             data = json.load(f)
         rows = []
         for r in data.get("results", []):
             uid = r.get("unique_id", "")
-            # NUR Tests anzeigen, keine Model-Runs
             if not uid.startswith("test."):
                 continue
-            # Schicht bestimmen
             if "stg_" in uid:
                 layer = "Staging"
             elif "hub_" in uid or "sat_" in uid or "lnk_" in uid or "pit_" in uid:
@@ -281,13 +351,12 @@ with tab_quality:
                 layer = "Marts"
             else:
                 layer = "Andere"
-            # dbt-expectations vs. Standard
             is_expectation = "dbt_expectations" in uid
             test_type = "dbt-expectations" if is_expectation else "Standard"
-            # Lesbarer Name + Modell
             readable_name = _readable_test_name(uid)
             model_name = _get_model_name(uid)
             rows.append({
+                "Quelle": source_label,
                 "Schicht": layer,
                 "Modell": model_name,
                 "Typ": test_type,
@@ -297,17 +366,38 @@ with tab_quality:
                 "Laufzeit (s)": round(r.get("execution_time", 0), 3),
                 "Meldung": r.get("message") or "",
             })
-        df = pd.DataFrame(rows)
         ts = data.get("metadata", {}).get("generated_at", "")
-        return df, ts
+        return rows, ts
+
+    def load_run_results():
+        files = _collect_run_results_files()
+        if not files:
+            return None, None
+        all_rows = []
+        latest_ts = ""
+        for label, path in files:
+            rows, ts = _parse_single_run_results(path, label)
+            all_rows.extend(rows)
+            if ts > latest_ts:
+                latest_ts = ts
+        if not all_rows:
+            return None, None
+        df = pd.DataFrame(all_rows)
+        # Duplikate entfernen (gleicher Test kann in klassisch + domain vorkommen)
+        df = df.drop_duplicates(subset=["Test", "Modell"], keep="last")
+        return df, latest_ts
 
     # --- Freshness aus sources.json parsen ---
-    SOURCES_PATH = Path("/usr/app/dbt/target/sources.json")
+    # Klassisch: target/sources.json, Split: target/domain_orders/sources.json
+    SOURCES_PATH = TARGET_DIR / "sources.json"
+    SOURCES_PATH_SPLIT = TARGET_DIR / "domain_orders" / "sources.json"
 
     def load_freshness_results():
-        if not SOURCES_PATH.exists():
+        # Bevorzuge Split-Ergebnis, Fallback auf klassisch
+        path = SOURCES_PATH_SPLIT if SOURCES_PATH_SPLIT.exists() else SOURCES_PATH
+        if not path.exists():
             return None
-        with open(SOURCES_PATH) as f:
+        with open(path) as f:
             data = json.load(f)
         rows = []
         for r in data.get("results", []):
@@ -591,6 +681,279 @@ with tab_incremental:
     6. **Historisierung** unten prüfen → Kunden 1+2 haben je 2 Versionen
     """)
 
+# ==================== TAB: DAG-SPLITTING ====================
+with tab_splitting:
+    st.title("DAG-Splitting: Monolithisch vs. Aufgeteilt")
+    st.markdown("""
+    Vergleich zwischen dem monolithischen `dbt_cosmos` DAG (alles in einem)
+    und der aufgeteilten Variante mit **3 Domain-DAGs**, verkettet ueber **Airflow Datasets**.
+    """)
+    st.divider()
+
+    # --- Vergleichstabelle ---
+    st.subheader("Vergleich auf einen Blick")
+    comparison = {
+        "Aspekt": [
+            "Anzahl DAGs",
+            "Trigger",
+            "Fehler-Isolation",
+            "Parallelitaet",
+            "Monitoring",
+            "Retry",
+            "Skalierung",
+            "Bei fehlender Quelle",
+        ],
+        "dbt_cosmos (monolithisch)": [
+            "1 DAG mit 43 Tasks",
+            "Manuell",
+            "Ein Fehler stoppt alles",
+            "Innerhalb eines DAG",
+            "Eine Statusanzeige",
+            "Gesamter Graph oder manuell",
+            "Ein Worker-Pool",
+            "Harter Fehler",
+        ],
+        "cosmos_split (3 DAGs)": [
+            "3 DAGs (master, orders, marts)",
+            "Dataset-Kette + Cron-Fallback",
+            "Nur die betroffene Domain stoppt",
+            "Ueber DAG-Grenzen hinweg",
+            "Pro Domain separat",
+            "Pro Domain unabhaengig",
+            "Verschiedene Pools moeglich",
+            "Cron-Fallback + Warnung",
+        ],
+    }
+    st.dataframe(pd.DataFrame(comparison), use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # --- Architektur-Diagramm ---
+    st.subheader("Architektur: 3 Domains mit Dataset-Kette")
+    col_flow1, col_flow2, col_flow3 = st.columns(3)
+    with col_flow1:
+        st.markdown("**cosmos_master**")
+        st.markdown("*Domain: Stammdaten*")
+        st.code(
+            "Trigger: Manuell\n"
+            "\n"
+            "stg_customers\n"
+            "stg_employees\n"
+            "stg_products\n"
+            "hub_customer\n"
+            "hub_employee\n"
+            "hub_product\n"
+            "sat_customer\n"
+            "sat_employee\n"
+            "sat_product\n"
+            "\n"
+            "-> dbt test (domain_master)\n"
+            "-> Dataset: dbt://domain_master",
+            language=None,
+        )
+    with col_flow2:
+        st.markdown("**cosmos_orders**")
+        st.markdown("*Domain: Bestellungen*")
+        st.code(
+            "Trigger: Dataset ODER 06:00\n"
+            "\n"
+            "[Freshness-Check]\n"
+            "  frisch -> normaler Lauf\n"
+            "  veraltet -> Lauf mit Warnung\n"
+            "\n"
+            "stg_orders, stg_order_details\n"
+            "hub_order\n"
+            "lnk_order_customer\n"
+            "lnk_order_employee\n"
+            "lnk_order_product\n"
+            "sat_order, sat_order_detail\n"
+            "pit_customer, pit_order\n"
+            "\n"
+            "-> dbt test + source freshness\n"
+            "-> Dataset: dbt://domain_orders",
+            language=None,
+        )
+    with col_flow3:
+        st.markdown("**cosmos_marts**")
+        st.markdown("*Domain: Consumption*")
+        st.code(
+            "Trigger: Dataset ODER 07:00\n"
+            "\n"
+            "mart_revenue_per_customer\n"
+            "mart_order_overview\n"
+            "mart_product_sales\n"
+            "\n"
+            "-> dbt test (consumption)",
+            language=None,
+        )
+
+    st.info(
+        "**Dataset-Kette:** `cosmos_master` publiziert `dbt://domain_master` → "
+        "triggert `cosmos_orders` → publiziert `dbt://domain_orders` → "
+        "triggert `cosmos_marts`. In der Airflow UI unter **Datasets** sichtbar.\n\n"
+        "**Mit PSA-Vorstufe:** `psa_cosmos_flow` publiziert `dbt://psa_loaded` → "
+        "triggert `cosmos_master` → die ganze Kette laeuft automatisch weiter."
+    )
+
+    st.divider()
+
+    # --- Domain-Tags ---
+    st.subheader("Grundlage: dbt Domain-Tags")
+    st.markdown("""
+    Die Aufteilung basiert auf **Tags** in `dbt_project.yml`. Cosmos selektiert
+    die Modelle pro DAG mit `select=["tag:domain_master"]` etc.
+    """)
+    tag_data = {
+        "Tag": ["domain_master", "domain_master", "domain_master",
+                "domain_orders", "domain_orders", "domain_orders",
+                "consumption", "consumption", "consumption"],
+        "Modelle": [
+            "stg_customers, stg_employees, stg_products",
+            "hub_customer, hub_employee, hub_product",
+            "sat_customer, sat_employee, sat_product",
+            "stg_orders, stg_order_details",
+            "hub_order, alle Links (lnk_order_*)",
+            "sat_order, sat_order_detail, pit_customer, pit_order",
+            "mart_revenue_per_customer",
+            "mart_order_overview",
+            "mart_product_sales",
+        ],
+        "Schicht": [
+            "Staging", "Hubs", "Satellites",
+            "Staging", "Hubs + Links", "Satellites + PITs",
+            "Mart", "Mart", "Mart",
+        ],
+    }
+    st.dataframe(pd.DataFrame(tag_data), use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # --- Graceful Degradation ---
+    st.subheader("Graceful Degradation: Was passiert bei fehlenden Quellen?")
+    st.markdown("""
+    In einer Umgebung mit 100+ DAGs liefert nicht jede Quelle rechtzeitig.
+    **Nicht jeder Ladeausfall sollte die Pipeline blockieren.**
+    """)
+
+    col_gd1, col_gd2 = st.columns(2)
+    with col_gd1:
+        st.markdown("**DatasetOrTimeSchedule**")
+        st.markdown("""
+        Jeder Split-DAG hat zwei Trigger:
+        - **Dataset**: Startet sofort wenn die Vorstufe fertig ist
+        - **Cron-Fallback**: Startet spaetestens um 06:00/07:00
+
+        Wenn `cosmos_master` nicht laeuft (Quelle fehlt),
+        starten `cosmos_orders` und `cosmos_marts` trotzdem
+        per Cron und arbeiten mit den bestehenden Daten.
+        """)
+    with col_gd2:
+        st.markdown("**Freshness-Check (BranchPythonOperator)**")
+        st.markdown("""
+        `cosmos_orders` prueft als Erstes, ob die Stammdaten frisch sind:
+        - **Frisch**: Normaler Lauf (gruener Pfad)
+        - **Veraltet**: Warnung, aber trotzdem Lauf (gelber Pfad)
+
+        In beiden Faellen laufen Tests und dokumentieren den Zustand.
+        Im Graph View der Airflow UI sieht man, welcher Branch genommen wurde.
+        """)
+
+    st.divider()
+
+    st.markdown("**Source Freshness mit `warn_after` (ohne `error_after`)**")
+    st.markdown("""
+    In `_staging__sources.yml` ist fuer jede Quelle ein `warn_after`-Schwellwert
+    konfiguriert, aber bewusst **kein** `error_after`:
+
+    | Source | warn_after | error_after | Effekt |
+    |--------|-----------|-------------|--------|
+    | customers | 12h | - | Warnung wenn aelter als 12h, nie ein Fehler |
+    | employees | 12h | - | dto. |
+    | orders | 24h | - | Bestellungen koennen aelter sein |
+    | products | 48h | - | Stammdaten aendern sich selten |
+
+    `dbt source freshness` gibt **immer Exit-Code 0** (Erfolg).
+    Veraltung wird in `target/sources.json` dokumentiert, nicht blockiert.
+    """)
+
+    st.success(
+        "**Kernprinzip:** Fehlende Quellen sind ein Dokumentations-Event, "
+        "kein Fehler-Event. Die Pipeline laeuft weiter, Tests zeigen was "
+        "veraltet ist, und das Monitoring alarmiert das Team."
+    )
+
+    st.divider()
+
+    # --- Live-Status der Vault-Schichten ---
+    st.subheader("Vault-Status nach Domain")
+
+    @st.cache_data(ttl=10)
+    def get_domain_stats():
+        try:
+            conn = get_connection()
+            query = """
+                SELECT
+                    CASE
+                        WHEN relname IN ('hub_customer', 'hub_employee', 'hub_product',
+                                         'sat_customer', 'sat_employee', 'sat_product')
+                            THEN 'domain_master'
+                        WHEN relname IN ('hub_order', 'lnk_order_customer', 'lnk_order_employee',
+                                         'lnk_order_product', 'sat_order', 'sat_order_detail',
+                                         'pit_customer', 'pit_order')
+                            THEN 'domain_orders'
+                        WHEN relname LIKE 'mart_%'
+                            THEN 'consumption'
+                        ELSE 'andere'
+                    END AS domain,
+                    relname AS tabelle,
+                    n_live_tup AS zeilen
+                FROM pg_stat_user_tables
+                WHERE schemaname IN ('raw_vault', 'mart')
+                ORDER BY domain, relname
+            """
+            df = pd.read_sql(query, conn)
+            conn.close()
+            return df
+        except Exception:
+            return None
+
+    if st.button("Status aktualisieren", key="refresh_splitting"):
+        st.cache_data.clear()
+
+    domain_stats = get_domain_stats()
+    if domain_stats is not None and not domain_stats.empty:
+        for domain in ["domain_master", "domain_orders", "consumption"]:
+            subset = domain_stats[domain_stats["domain"] == domain]
+            if not subset.empty:
+                label = {"domain_master": "Stammdaten", "domain_orders": "Bestellungen",
+                         "consumption": "Consumption (Marts)"}
+                st.markdown(f"**{label.get(domain, domain)}** ({len(subset)} Tabellen, "
+                            f"{int(subset['zeilen'].sum())} Zeilen)")
+                st.dataframe(subset[["tabelle", "zeilen"]], use_container_width=True, hide_index=True)
+    else:
+        st.info("Keine Vault-Tabellen gefunden. Bitte zuerst einen der dbt-DAGs ausfuehren.")
+
+    st.divider()
+
+    # --- Demo-Ablauf ---
+    st.subheader("Demo-Ablauf: Monolithisch vs. Split")
+    st.markdown("""
+    **Variante A - Monolithisch (zum Vergleich):**
+    1. `init_raw_data` triggern
+    2. `dbt_cosmos` triggern → 1 DAG, 43 Tasks, alles auf einmal
+
+    **Variante B - Split (das neue Pattern):**
+    1. `init_raw_data` triggern
+    2. `cosmos_master` triggern → nur Stammdaten
+    3. `cosmos_orders` startet **automatisch** (Dataset-Trigger von master)
+    4. `cosmos_marts` startet **automatisch** (Dataset-Trigger von orders)
+
+    **Was man in der Airflow UI sieht:**
+    - **Datasets-Tab**: Die Kette `dbt://domain_master` → `dbt://domain_orders`
+    - **Graph View** von `cosmos_orders`: Der Freshness-Check-Branch
+    - **DAG-Runs**: Drei separate Laeufe mit unabhaengigem Status
+    """)
+
 # ==================== TAB: PSA-PFAD (NG GENERATOR) ====================
 with tab_psa:
     st.title("PSA-Pfad (NG Generator)")
@@ -730,22 +1093,39 @@ with tab_psa:
 
     # --- Demo-Workflow ---
     st.subheader("Demo-Workflow")
-    st.markdown("""
-    **Schritt 1:** DAG `init_raw_data` ausführen (CSV-Daten in Raw laden)
 
-    **Schritt 2:** DAG `dbt_classic` ausführen (klassischer Pfad aufbauen)
+    col_psa_classic, col_psa_cosmos = st.columns(2)
+    with col_psa_classic:
+        st.markdown("**Variante A: PSA klassisch (BashOperator)**")
+        st.markdown("""
+        1. `init_raw_data` ausfuehren
+        2. `dbt_classic` ausfuehren (klassischer Vault)
+        3. `psa_flow` ausfuehren (PSA + Vault aus PSA)
+        4. Hier Ergebnisse vergleichen
+        5. `psa_rebuild_demo` ausfuehren (Rebuild-Beweis)
+        """)
+    with col_psa_cosmos:
+        st.markdown("**Variante B: PSA + Cosmos (empfohlen)**")
+        st.markdown("""
+        1. `init_raw_data` ausfuehren
+        2. `psa_cosmos_flow` triggern:
+           - NG Generator laedt PSA
+           - Cosmos baut Vault aus PSA (individuelle Tasks)
+           - Publiziert `Dataset("dbt://psa_loaded")`
+        3. `cosmos_master` startet **automatisch** (Dataset)
+        4. `cosmos_orders` startet **automatisch** (Dataset)
+        5. `cosmos_marts` startet **automatisch** (Dataset)
 
-    **Schritt 3:** DAG `psa_flow` ausführen (PSA-Pfad aufbauen)
+        → Volle Kette: PSA → Stammdaten → Bestellungen → Marts
+        """)
 
-    **Schritt 4:** In diesem Tab die Ergebnisse vergleichen:
-    - Gleiche Zeilenzahlen in Hub/Satellite = PSA-Pfad produziert identisches Ergebnis
-    - PSA hat zusätzlich: SCD2-History, Delete Detection, Content-Hash
-
-    **Schritt 5 (Highlight):** DAG `psa_rebuild_demo` ausführen:
-    - Droppt die PSA-Vault-Tabellen (hub_customer_psa, sat_customer_psa)
-    - Baut sie aus der PSA neu auf (dbt run --full-refresh)
-    - Beweist: **kein Datenverlust**, kein Zurückgreifen auf CSV nötig
-    """)
+    st.info(
+        "**Variante B** zeigt die produktionsnahe Architektur: "
+        "PSA als stabile Vorstufe, Cosmos fuer den dbt-Teil, "
+        "Datasets fuer die Verkettung. In der Airflow UI sieht man "
+        "die komplette Dataset-Kette: `dbt://psa_loaded` → "
+        "`dbt://domain_master` → `dbt://domain_orders`."
+    )
 
     st.divider()
 
