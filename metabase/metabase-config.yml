@@ -1,0 +1,17 @@
+version: 1
+config:
+  users:
+    - first_name: Admin
+      last_name: Demo
+      password: admin2pistor
+      email: admin@demo.com
+      is_superuser: true
+  databases:
+    - name: Demo (Data Vault)
+      engine: postgres
+      details:
+        host: postgres
+        port: 5432
+        user: demo_user
+        password: demo_pass
+        dbname: demo

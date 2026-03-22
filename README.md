@@ -95,6 +95,28 @@ Beim ersten Start passiert automatisch:
 | **pgAdmin** | http://localhost:5050 | admin@demo.com / admin |
 | **PostgreSQL** | localhost:5432 | demo_user / demo_pass / DB: demo |
 
+#### Optional: Metabase (BI + DQ-Dashboards)
+
+Metabase ist als **optionaler Overlay** verfügbar und ergänzt die Demo um ein professionelles BI-Tool für Dashboards auf den Mart-Tabellen und DQ-Visualisierung:
+
+```bash
+# Statt nur docker compose up:
+docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
+```
+
+| Service | URL | Login |
+|---------|-----|-------|
+| **Metabase** | http://localhost:3000 | admin@demo.com / admin2pistor |
+
+> **RAM-Hinweis:** Metabase benötigt ca. 500-700 MB zusätzlich. Gesamtbedarf mit Metabase: ~10 GB.
+
+Beim ersten Start (frisches Volume) das Setup-Script ausführen:
+```bash
+# Wartet auf Metabase-Start und richtet Admin-User + DB-Verbindung ein
+./metabase/setup-metabase.sh
+```
+Danach ist Metabase sofort einsatzbereit mit der PostgreSQL-Verbindung "Demo (Data Vault)" und allen Schemas (raw, staging, raw_vault, mart, dq).
+
 ### Worker skalieren
 ```bash
 # Mehrere Celery-Worker starten (z.B. 3 parallele Worker)
@@ -107,9 +129,13 @@ docker compose up -d --scale airflow-worker=3
 ```bash
 # Stoppen (Daten bleiben erhalten)
 docker compose down
+# Mit Metabase:
+docker compose -f docker-compose.yml -f docker-compose.bi.yml down
 
 # Stoppen + alle Daten löschen (frischer Neustart)
 docker compose down -v
+# Mit Metabase:
+docker compose -f docker-compose.yml -f docker-compose.bi.yml down -v
 ```
 
 ---
@@ -224,6 +250,7 @@ Das ist die **produktionsnahe Architektur**: PSA als stabile Vorstufe (NG Genera
 - **Streamlit Portal** (localhost:8572): Zentrale Übersicht mit allen Tabs
 - **pgAdmin** (localhost:5050): SQL-Abfragen auf alle Schemas
 - **dbt Docs** (localhost:8081): Lineage-Graph und Modell-Dokumentation
+- **Metabase** (localhost:3000): BI-Dashboards auf Marts + DQ-Monitoring (optional, siehe unten)
 - **DBeaver**: Direktverbindung zu PostgreSQL
 
 ### Demo-Reset
@@ -255,6 +282,12 @@ Für einen sauberen Neustart einfach `init_raw_data` erneut triggern - der DAG m
 │  │ (Broker) │  │ dbt Docs │ │ pgAdmin │ │Streamlit │             │
 │  └──────────┘  │  :8081   │ │  :5050  │ │  :8572   │             │
 │                └──────────┘ └─────────┘ └──────────┘             │
+│                                                                   │
+│  Optional (docker-compose.bi.yml):                                │
+│  ┌──────────┐                                                     │
+│  │ Metabase │  BI-Dashboards (Marts) + DQ-Monitoring              │
+│  │  :3000   │  Liest: mart.*, dq.test_results                    │
+│  └──────────┘                                                     │
 └───────────────────────────────────────────────────────────────────┘
 
 Lokale Volumes (gemountet):
@@ -434,6 +467,7 @@ Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount b
 ```
 new_env/
 ├── docker-compose.yml          # 11 Services (Postgres, Redis, 6x Airflow, dbt-docs, pgAdmin, Streamlit)
+├── docker-compose.bi.yml       # Optional: Metabase für BI + DQ-Dashboards
 ├── Dockerfile.airflow          # Airflow 3 + Cosmos + dbt (isolierter venv)
 ├── Dockerfile.dbt              # dbt für Docs-Server
 ├── .env                        # Shared Secrets (Fernet Key, JWT)
@@ -443,9 +477,10 @@ new_env/
 │   ├── models/raw_vault/       # 4 Hubs, 3 Links, 5 Sats, 2 PITs
 │   └── models/marts/           # 3 Business-Tabellen
 ├── airflow/
-│   ├── dags/                   # 11 DAGs (init, classic, cosmos, cosmos_split x3, delta x2, psa x3)
+│   ├── dags/                   # 12 DAGs (init, classic, cosmos, cosmos_split x3, delta x2, psa x3, dq_persist)
+│   │   └── scripts/            # Python-Utilities für DAGs
 │   └── config/airflow.cfg      # Shared Secrets für JWT-Auth
-├── postgres/init/              # DB-Init-Scripte (Schemas)
+├── postgres/init/              # DB-Init-Scripte (Schemas inkl. dq)
 └── streamlit/                  # Portal-App
 ```
 
@@ -477,6 +512,71 @@ Der Test `expect_column_pair_values_A_to_be_greater_than_B` deckt auf, dass **30
 # Tests ausführen (innerhalb des Airflow-Workers):
 dbt test --select tag:quality tag:vault-integrity tag:freshness tag:business-logic
 ```
+
+### DQ-Monitoring: Streamlit vs. Metabase
+
+Die Demo bietet **zwei Wege** zur Visualisierung der Datenqualität:
+
+| | Streamlit (integriert) | Metabase (optional) |
+|--|----------------------|-------------------|
+| **Datenquelle** | `run_results.json` (Dateisystem) | `dq.test_results` (PostgreSQL) |
+| **Historie** | Nur letzter Run pro Domain | Alle Runs (akkumuliert) |
+| **Setup** | Eingebaut, keine Konfiguration | `docker-compose.bi.yml` aktivieren |
+| **Stärke** | Sofort sichtbar, kein extra Schritt | Trends über Zeit, interaktive Dashboards |
+| **Zielgruppe** | Entwickler, schnelle Prüfung | Fachbereich, Management-Reporting |
+
+**Typischer Schulungsablauf:**
+1. Streamlit-Tab zeigen: "So sieht das integriert aus"
+2. Metabase zeigen: "So sieht das in der Praxis aus - mit Historie und BI-Dashboards"
+
+#### Metabase einrichten (optional)
+
+```bash
+# 1. Umgebung mit Metabase starten
+docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
+
+# 2. Metabase Setup (nur bei frischem Volume noetig)
+./metabase/setup-metabase.sh
+#    → Erstellt Admin-User (admin@demo.com / admin2pistor)
+#    → Verbindet PostgreSQL "Demo (Data Vault)" automatisch
+
+# 3. Rohdaten laden und dbt ausfuehren (falls nicht schon geschehen)
+#    In Airflow UI: init_raw_data → dbt_classic triggern
+
+# 4. Testergebnisse in PostgreSQL persistieren
+#    In Airflow UI: dq_persist_results triggern
+#    Dieser DAG liest alle run_results.json und schreibt nach dq.test_results
+
+# 5. Metabase oeffnen: http://localhost:3000 → Dashboards bauen
+```
+
+**DQ-Dashboard in Metabase (Beispiel-Abfragen):**
+
+```sql
+-- Übersicht: Pass/Fail pro Schicht
+SELECT layer, status, COUNT(*) AS anzahl
+FROM dq.test_results
+WHERE run_at = (SELECT MAX(run_at) FROM dq.test_results)
+GROUP BY layer, status
+ORDER BY layer, status;
+
+-- Trend: Fehlgeschlagene Tests über alle Runs
+SELECT DATE(run_at) AS datum, COUNT(*) AS fehler
+FROM dq.test_results
+WHERE status IN ('fail', 'error')
+GROUP BY DATE(run_at)
+ORDER BY datum;
+
+-- Detail: Alle Warnungen und Fehler
+SELECT run_at, domain, model_name, test_name, status, failures, message
+FROM dq.test_results
+WHERE status IN ('fail', 'warn', 'error')
+ORDER BY run_at DESC;
+```
+
+**BI-Dashboards auf Mart-Tabellen:**
+
+Metabase erkennt automatisch die Mart-Tabellen (`mart.mart_revenue_per_customer`, `mart.mart_order_overview`, `mart.mart_product_sales`). Damit lassen sich in wenigen Klicks BI-Dashboards erstellen - z.B. Umsatz pro Kunde, Top-Produkte, Bestelltrends.
 
 ---
 
