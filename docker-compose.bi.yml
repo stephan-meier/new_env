@@ -22,7 +22,7 @@ services:
       # Config-File fuer Admin-User und DB-Verbindung
       MB_CONFIG_FILE_PATH: /metabase-config/metabase-config.yml
       # Java Heap begrenzen fuer RAM-sparenden Betrieb
-      JAVA_OPTS: "-Xmx512m"
+      JAVA_OPTS: "-Xmx1024m"
     volumes:
       - metabase-data:/metabase-data
       - ./metabase/metabase-config.yml:/metabase-config/metabase-config.yml:ro
