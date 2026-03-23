@@ -95,6 +95,33 @@ Beim ersten Start passiert automatisch:
 | **pgAdmin** | http://localhost:5050 | admin@demo.com / admin |
 | **PostgreSQL** | localhost:5432 | demo_user / demo_pass / DB: demo |
 
+#### Optional: MCP + KI-Assistenz (Open WebUI + Ollama)
+
+MCP (Model Context Protocol) verbindet KI-Assistenten direkt mit dem Data Stack. Zwei Nutzungswege:
+
+**Weg 1 — Claude Desktop / Claude Code (einfachste Option):**
+```bash
+# mcp/claude-desktop-config.json als Vorlage verwenden
+cp mcp/claude-desktop-config.json ~/.claude/claude_desktop_config.json
+# Pfad zu dbt_project anpassen, dann Claude Desktop neu starten
+```
+
+**Weg 2 — Open WebUI + Ollama (Browser-Chat, komplett lokal):**
+```bash
+# Ollama auf dem Host: https://ollama.com
+ollama pull qwen2.5:7b   # ~4.7 GB
+
+# Mit MCP-Overlay starten
+docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
+```
+
+| Service | URL | Login |
+|---------|-----|-------|
+| **Open WebUI** | http://localhost:3001 | Beim ersten Start Account erstellen |
+| **MCP-Gateway API** | http://localhost:8200/docs | - |
+
+> **RAM-Hinweis:** Open WebUI + MCP-Gateway ca. +800 MB. Gesamtbedarf mit MCP-Overlay: ~10 GB.
+
 #### Optional: Metabase (BI + DQ-Dashboards)
 
 Metabase ist als **optionaler Overlay** verfügbar und ergänzt die Demo um ein professionelles BI-Tool für Dashboards auf den Mart-Tabellen und DQ-Visualisierung:
@@ -288,6 +315,17 @@ Für einen sauberen Neustart einfach `init_raw_data` erneut triggern - der DAG m
 │  │ Metabase │  BI-Dashboards (Marts) + DQ-Monitoring              │
 │  │  :3000   │  Liest: mart.*, dq.test_results                    │
 │  └──────────┘                                                     │
+│                                                                   │
+│  Optional (docker-compose.mcp.yml):                               │
+│  ┌──────────┐  ┌─────────────────────────────────────────────┐   │
+│  │Open WebUI│  │ MCP-Gateway :8200 (mcpo)                    │   │
+│  │  :3001   │◄─┤  /airflow  → mcp-server-apache-airflow      │   │
+│  │ + Ollama │  │  /dbt      → dbt-mcp (offiziell, dbt Labs)  │   │
+│  └──────────┘  └─────────────────────────────────────────────┘   │
+│                                                                   │
+│  Lokal auf Host (kein Docker):                                    │
+│  Claude Desktop / Claude Code mit mcp/claude-desktop-config.json │
+│  → PostgreSQL-MCP, dbt-MCP, Airflow-MCP, Metabase-MCP            │
 └───────────────────────────────────────────────────────────────────┘
 
 Lokale Volumes (gemountet):
@@ -466,10 +504,12 @@ Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount b
 ### Projekt-Struktur
 ```
 new_env/
-├── docker-compose.yml          # 11 Services (Postgres, Redis, 6x Airflow, dbt-docs, pgAdmin, Streamlit)
-├── docker-compose.bi.yml       # Optional: Metabase für BI + DQ-Dashboards
+├── docker-compose.yml          # Core: 11 Services (Postgres, Redis, 6x Airflow, dbt-docs, pgAdmin, Streamlit)
+├── docker-compose.bi.yml       # Optional: Metabase für BI + DQ-Dashboards (~+700 MB)
+├── docker-compose.mcp.yml      # Optional: Open WebUI + MCP-Gateway für KI-Assistenz (~+800 MB)
 ├── Dockerfile.airflow          # Airflow 3 + Cosmos + dbt (isolierter venv)
 ├── Dockerfile.dbt              # dbt für Docs-Server
+├── Dockerfile.mcp              # MCP-Gateway (mcpo + dbt-mcp + airflow-mcp)
 ├── .env                        # Shared Secrets (Fernet Key, JWT)
 ├── daten/                      # CSV-Quelldaten
 ├── dbt_project/                # Komplettes dbt-Projekt
@@ -480,6 +520,14 @@ new_env/
 │   ├── dags/                   # 12 DAGs (init, classic, cosmos, cosmos_split x3, delta x2, psa x3, dq_persist)
 │   │   └── scripts/            # Python-Utilities für DAGs
 │   └── config/airflow.cfg      # Shared Secrets für JWT-Auth
+├── mcp/
+│   ├── mcp-config.json         # mcpo-Konfiguration (Airflow-MCP + dbt-MCP für Open WebUI)
+│   └── claude-desktop-config.json  # Template: Alle 4 MCPs für Claude Desktop / Claude Code
+├── metabase/
+│   ├── metabase-config.yml     # Admin-User + PostgreSQL-Verbindung (auto-setup)
+│   ├── plugins/                # Community-Plugins (duckdb.metabase-driver.jar)
+│   └── setup-metabase.sh       # Einrichtungs-Script (erster Start)
+├── duckdb/                     # DuckDB-Dateien hier ablegen → /duckdb/ im Container
 ├── postgres/init/              # DB-Init-Scripte (Schemas inkl. dq)
 └── streamlit/                  # Portal-App
 ```
@@ -549,6 +597,26 @@ docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
 
 # 5. Metabase oeffnen: http://localhost:3000 → Dashboards bauen
 ```
+
+#### DuckDB-Dateien in Metabase einbinden (optional)
+
+Das DuckDB Community-Plugin (v0.2.6) ist bereits vorinstalliert (`metabase/plugins/duckdb.metabase-driver.jar`). DuckDB-Dateien werden über ein Volume direkt in den Container gemountet:
+
+```bash
+# 1. DuckDB-Datei in ./duckdb/ ablegen (beliebiger Name)
+cp meine_analyse.duckdb ./duckdb/
+
+# 2. Metabase starten (Plugin wird automatisch beim ersten Start registriert)
+docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
+
+# 3. In Metabase neue Datenbankverbindung anlegen:
+#    Einstellungen → Datenbanken → Datenbank hinzufügen
+#    Typ:            DuckDB
+#    Name:           (frei waehlbar)
+#    Datenbankpfad:  /duckdb/meine_analyse.duckdb
+```
+
+> **Hinweis:** Der Ordner `./duckdb/` ist für `.gitignore` vorgesehen — DuckDB-Dateien werden nicht ins Repository eingecheckt. Die Verzeichnisstruktur bleibt erhalten (via `duckdb/HIER_DUCKDB_DATEIEN_ABLEGEN.txt`).
 
 **DQ-Dashboard in Metabase (Beispiel-Abfragen):**
 
@@ -1548,48 +1616,105 @@ def create_soft_load_group(group_id, load_command, freshness_query, max_age):
 
 ## Ausblick: Optionale Erweiterungen
 
-### dbt-MCP - KI-gestützte dbt-Entwicklung
+### KI-Assistenz mit MCP (Model Context Protocol)
 
-[dbt-MCP](https://github.com/dbt-labs/dbt-mcp) ist ein MCP-Server (Model Context Protocol) von dbt Labs, der dbt-Funktionalität als strukturierte Tools für KI-Assistenten bereitstellt. Damit kann man z.B. in **Claude Desktop**, **VS Code Copilot Chat** oder **Cursor** per natürlicher Sprache mit dem dbt-Projekt interagieren:
+MCP verbindet KI-Assistenten (Claude, Ollama, Copilot) direkt mit den Tools des Data Stacks. Statt Screenshots oder Copy-Paste kann man per natürlicher Sprache mit der gesamten Datenpipeline interagieren:
 
-- *"Zeig mir die Lineage von mart_revenue_per_customer"*
-- *"Generiere ein YAML für ein neues Staging-Modell"*
-- *"Führe die Tests mit Tag 'quality' aus und zeig mir die Ergebnisse"*
-- *"Compiliere hub_customer und zeig mir das generierte SQL"*
+- *"Trigger den DAG `dbt_classic` und zeig mir die Task-Logs"*
+- *"Wie viele Zeilen hat `mart_revenue_per_customer`? Zeig mir die Top 5 Kunden."*
+- *"Generiere ein YAML für ein neues Staging-Modell `stg_suppliers`"*
+- *"Welche dbt-Tests sind zuletzt fehlgeschlagen und warum?"*
+- *"Zeig mir die Lineage von `hub_customer` bis zum Mart"*
 
-**Funktionsumfang ohne dbt Cloud (lokal nutzbar):**
+#### MCP-Landschaft für diesen Stack
 
-| Kategorie | Was es kann |
-|-----------|-------------|
-| **dbt CLI** | `run`, `test`, `compile`, `show`, `parse`, `docs` - alles per Chat steuerbar |
-| **Codegen** | YAML-Definitionen und Staging-Modelle automatisch generieren |
-| **Lineage** | Abhängigkeiten aus `manifest.json` inspizieren |
-
-**Funktionen die dbt Cloud voraussetzen** (nicht in dieser Demo verfügbar):
-Discovery API (Model Health, Semantic Search), Semantic Layer (Metriken), Admin API (Job-Management), `text_to_sql`.
-
-**Setup (optional):**
-```bash
-# Python >= 3.12 erforderlich
-pip install dbt-mcp
-
-# In Claude Desktop config (~/.claude/claude_desktop_config.json):
-{
-  "mcpServers": {
-    "dbt": {
-      "command": "uvx",
-      "args": ["dbt-mcp"],
-      "env": {
-        "DBT_PROJECT_DIR": "/pfad/zu/new_env/dbt_project",
-        "DBT_MCP_ENABLE_DBT_CLI": "true",
-        "DBT_MCP_ENABLE_DBT_CODEGEN": "true"
-      }
-    }
-  }
-}
+```
+KI-Client (Claude Desktop / Claude Code / Open WebUI + Ollama / Cursor)
+       |
+       |-- PostgreSQL MCP  → Schema-Inspektion, read-only SQL          [Anthropic, offiziell]
+       |-- dbt MCP         → run/test/compile, Lineage, Codegen        [dbt Labs, offiziell]
+       |-- Airflow MCP     → DAGs triggern, Logs, Variablen, Status    [Community]
+       |-- Metabase MCP    → Dashboards, Questions, Schema erkunden    [Community]
 ```
 
-> **Hinweis:** dbt-MCP erlaubt KI-Assistenten, dbt-Befehle auszuführen die Datenbank-Objekte verändern können. In einer Demo-Umgebung ist das unkritisch, in Produktionsumgebungen sollte man die aktivierten Tool-Kategorien sorgfältig einschränken.
+| MCP-Server | Offiziell? | Reife | Repo |
+|-----------|-----------|-------|------|
+| **PostgreSQL** | Anthropic | Stabil | [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers/tree/main/src/postgres) |
+| **dbt** | dbt Labs | Stabil | [dbt-labs/dbt-mcp](https://github.com/dbt-labs/dbt-mcp) |
+| **Airflow** | Community | Funktional | [yangkyeongmo/mcp-server-apache-airflow](https://github.com/yangkyeongmo/mcp-server-apache-airflow) |
+| **Metabase** | Community | Feature-reich | [CognitionAI/metabase-mcp-server](https://github.com/CognitionAI/metabase-mcp-server) |
+
+#### Option A: Claude Desktop / Claude Code (empfohlen für diese Demo)
+
+Alle vier MCP-Server laufen als lokale Prozesse auf dem Host und verbinden sich mit den Docker-Containern über deren exposed Ports. Vorlage unter `mcp/claude-desktop-config.json`:
+
+```bash
+# Voraussetzungen
+npm install -g npx          # fuer PostgreSQL- und Metabase-MCP
+pip install uv              # fuer dbt-MCP und Airflow-MCP (uvx)
+
+# Konfiguration
+cp mcp/claude-desktop-config.json ~/.claude/claude_desktop_config.json
+# Pfad zu new_env/dbt_project anpassen!
+```
+
+**Wichtig:** `DBT_PROJECT_DIR` in der Config auf den absoluten Pfad zu `new_env/dbt_project` setzen.
+
+> **Sicherheitshinweis:** dbt-MCP und Airflow-MCP erlauben KI-Assistenten, Befehle auszuführen, die Datenbank-Objekte verändern können. In der Demo-Umgebung unkritisch, in Produktion die aktivierten Tool-Kategorien einschränken.
+
+#### Option B: Open WebUI + Ollama (komplett lokal, kein Cloud-Dienst)
+
+Als Docker-Overlay ergänzt `docker-compose.mcp.yml` die Demo um einen Browser-Chat mit lokalem Ollama und einen MCP-Gateway, der Airflow-MCP und dbt-MCP als HTTP-Endpoints bereitstellt:
+
+```bash
+# 1. Ollama installieren (falls noch nicht vorhanden): https://ollama.com
+# 2. Empfohlenes Modell laden (Tool Calling erforderlich):
+ollama pull qwen2.5:7b      # ~4.7 GB, sehr gut fuer Tool Calling
+# oder:
+ollama pull llama3.1:8b     # ~4.9 GB, Alternative
+
+# 3. MCP-Overlay starten (zusammen mit Core + BI):
+docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml up -d
+
+# Beim ersten Start: MCP-Gateway-Image wird gebaut (~3-5 Min.)
+```
+
+| Service | URL | Beschreibung |
+|---------|-----|-------------|
+| **Open WebUI** | http://localhost:3001 | Browser-Chat mit Ollama |
+| **MCP-Gateway** | http://localhost:8200 | OpenAPI-Docs: /docs |
+
+**Open WebUI einrichten:**
+1. Einstellungen → Werkzeuge → OpenAPI-Server hinzufügen
+2. URL: `http://mcp-gateway:8200/airflow` → Airflow-Tools aktivieren
+3. URL: `http://mcp-gateway:8200/dbt` → dbt-Tools aktivieren
+4. Modell `qwen2.5:7b` auswählen und loschatten
+
+> **RAM-Hinweis:** Open WebUI ~300 MB + MCP-Gateway ~500 MB. Ollama-Modell läuft auf dem Host (nicht in Docker). Gesamtbedarf mit allen Overlays: ~11 GB.
+
+#### Stoppen und Aufräumen mit MCP-Overlay
+
+```bash
+# Stoppen (Daten bleiben erhalten)
+docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml down
+
+# Stoppen + alle Daten löschen
+docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml down -v
+```
+
+#### Demo-Szenarien mit MCP
+
+**Szenario "Airflow per Chat steuern"** (Claude Desktop oder Open WebUI):
+> *"Pausiere alle DAGs ausser `dbt_classic`. Dann triggere `init_raw_data` und warte bis er fertig ist. Zeig mir danach die Task-Logs."*
+
+**Szenario "dbt per Chat entwickeln"** (Claude Desktop oder Claude Code):
+> *"Schau dir die Lineage von `mart_order_overview` an. Welche Staging-Modelle fliessen rein? Generiere dann ein YAML-Schema für das Modell mit sinnvollen Beschreibungen."*
+
+**Szenario "SQL per Sprache"** (PostgreSQL-MCP in Claude):
+> *"Wie viele Satellite-Versionen hat der Kunde mit der höchsten Bestellanzahl? Zeig mir die Hash-Diff-Änderungen chronologisch."*
+
+**Szenario "Vollständig lokal"** (Open WebUI + Ollama):
+> Gleiche Szenarien, aber ohne Cloudanbindung — ideal für Umgebungen mit Datenschutzanforderungen.
 
 ### PSA-Pfad mit NG Generator (optionaler alternativer Datenfluss)
 

@@ -1,0 +1,77 @@
+# Optional MCP + KI-Overlay: Lokale KI-Assistenz für den gesamten Data Stack
+#
+# Nutzung (empfohlen: alle drei Overlays):
+#   docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml up -d
+#
+# Nutzung (ohne Metabase):
+#   docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
+#
+# Voraussetzung: Ollama auf dem Host installiert (https://ollama.com)
+#   ollama pull qwen2.5:7b    # Empfohlen fuer Tool Calling (~4.7 GB)
+#   ollama pull llama3.1:8b   # Alternative
+#
+# Services:
+#   Open WebUI:  http://localhost:3001  (Browser-Chat mit Ollama + MCP-Tools)
+#   MCP-Gateway: http://localhost:8200  (OpenAPI-Docs: /docs)
+#
+# RAM-Bedarf: Open WebUI ~300 MB, MCP-Gateway ~500 MB (gesamt ca. +800 MB)
+# Ollama laeuft ausserhalb Docker direkt auf dem Host (nutzt vorhandene GPU/CPU)
+
+services:
+
+  # Open WebUI: Browser-basierter Chat mit lokalem Ollama + MCP-Tools
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "3001:8080"
+    volumes:
+      - open-webui-data:/app/backend/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Zugriff auf Host-Ollama (macOS/Linux)
+    environment:
+      # Ollama laeuft auf dem Host, nicht in Docker
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # Telemetrie deaktivieren - alles bleibt lokal
+      SCARF_NO_ANALYTICS: "true"
+      DO_NOT_TRACK: "true"
+      ANONYMIZED_TELEMETRY: "false"
+      WEBUI_SECRET_KEY: demo-mcp-secret-key
+    restart: always
+    networks:
+      - demo-network
+
+  # MCP-Gateway: mcpo-Proxy fuer Airflow-MCP und dbt-MCP
+  # Stellt jeden MCP-Server als eigenstaendigen HTTP/OpenAPI-Endpoint bereit
+  # Open WebUI verbindet sich via http://mcp-gateway:8200/<servername>
+  mcp-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    ports:
+      - "8200:8200"  # OpenAPI-Docs: http://localhost:8200/docs
+    volumes:
+      - ./mcp/mcp-config.json:/mcp-config.json:ro
+      - ./dbt_project:/usr/app/dbt:ro  # dbt-MCP braucht Projektzugriff
+    environment:
+      # Airflow MCP: verbindet sich mit dem Airflow API-Server im Demo-Netzwerk
+      AIRFLOW_BASE_URL: http://airflow-apiserver:8080
+      AIRFLOW_USERNAME: admin
+      AIRFLOW_PASSWORD: admin
+      # Airflow MCP: nur relevante API-Gruppen aktivieren
+      AIRFLOW_API_GROUPS: "dag,dagrun,taskinstance,variable"
+      # dbt MCP: Projektpfad (gemountet)
+      DBT_PROJECT_DIR: /usr/app/dbt
+      DBT_PROFILES_DIR: /usr/app/dbt
+      DBT_MCP_ENABLE_DBT_CLI: "true"
+      DBT_MCP_ENABLE_DBT_CODEGEN: "true"
+      # dbt Postgres Verbindung (via Docker-Netzwerk)
+      POSTGRES_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    networks:
+      - demo-network
+
+volumes:
+  open-webui-data:

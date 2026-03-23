@@ -1,0 +1,58 @@
+{
+  "_comment": "mcpo-Konfiguration fuer den MCP-Gateway-Container (docker-compose.mcp.yml)",
+  "_comment2": "Jeden Server als eigenen OpenAPI-Endpoint in Open WebUI einbinden:",
+  "_comment3": "  Einstellungen → Werkzeuge → http://mcp-gateway:8200/<servername>",
+
+  "mcpServers": {
+
+    "postgres": {
+      "_comment": "PostgreSQL MCP (offiziell, Anthropic): Schema-Inspektion, read-only SQL",
+      "_repo": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://demo_user:demo_pass@postgres:5432/demo"
+      ]
+    },
+
+    "airflow": {
+      "_comment": "Airflow MCP (Community): DAGs triggern, Logs, Status, Variablen",
+      "_repo": "https://github.com/yangkyeongmo/mcp-server-apache-airflow",
+      "command": "mcp-server-apache-airflow",
+      "env": {
+        "AIRFLOW_BASE_URL": "http://airflow-apiserver:8080",
+        "AIRFLOW_USERNAME": "admin",
+        "AIRFLOW_PASSWORD": "admin",
+        "AIRFLOW_API_GROUPS": "dag,dagrun,taskinstance,variable"
+      }
+    },
+
+    "dbt": {
+      "_comment": "dbt MCP (offiziell, dbt Labs): run/test/compile, Lineage, Codegen",
+      "_repo": "https://github.com/dbt-labs/dbt-mcp",
+      "command": "dbt-mcp",
+      "env": {
+        "DBT_PROJECT_DIR": "/usr/app/dbt",
+        "DBT_PROFILES_DIR": "/usr/app/dbt",
+        "DBT_MCP_ENABLE_DBT_CLI": "true",
+        "DBT_MCP_ENABLE_DBT_CODEGEN": "true",
+        "POSTGRES_HOST": "postgres"
+      }
+    },
+
+    "metabase": {
+      "_comment": "Metabase MCP (Community): Dashboards, Questions, Schema",
+      "_comment2": "Nur sinnvoll wenn docker-compose.bi.yml aktiv ist!",
+      "_repo": "https://github.com/CognitionAI/metabase-mcp-server",
+      "command": "npx",
+      "args": ["-y", "@cognitionai/metabase-mcp-server"],
+      "env": {
+        "METABASE_URL": "http://metabase:3000",
+        "METABASE_USERNAME": "admin@demo.com",
+        "METABASE_PASSWORD": "admin2pistor"
+      }
+    }
+
+  }
+}

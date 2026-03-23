@@ -1,0 +1,6 @@
+# Metabase extrahiert beim Start alle eingebauten Treiber hierher - nicht einchecken
+*.metabase-driver.jar
+*.db.mv.db
+
+# Nur den DuckDB Community-Treiber explizit einschliessen
+!duckdb.metabase-driver.jar

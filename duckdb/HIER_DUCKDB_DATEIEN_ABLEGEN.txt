@@ -1,0 +1,12 @@
+DuckDB-Dateien (.duckdb) hier ablegen.
+
+Im laufenden Metabase-Container sind sie unter /duckdb/<dateiname>.duckdb erreichbar.
+
+Neue Verbindung in Metabase einrichten:
+  Einstellungen → Datenbanken → Datenbank hinzufügen
+  Typ:  DuckDB
+  Name: (frei waehlbar, z.B. "Meine Analyse")
+  Datenbankpfad: /duckdb/meine_datei.duckdb
+
+Hinweis: Der Ordner ./duckdb/ ist nicht in Docker-Compose eingebunden wenn
+Metabase ohne das BI-Overlay gestartet wird.

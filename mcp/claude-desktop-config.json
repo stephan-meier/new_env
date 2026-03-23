@@ -1,0 +1,71 @@
+{
+  "_anleitung": [
+    "Template fuer Claude Desktop MCP-Konfiguration.",
+    "Datei: ~/.claude/claude_desktop_config.json  (macOS/Linux)",
+    "       %APPDATA%\\Claude\\claude_desktop_config.json  (Windows)",
+    "",
+    "WICHTIG: /ABSOLUTER/PFAD/ZU/new_env durch den tatsaechlichen Pfad ersetzen!",
+    "         Die Demo-Umgebung muss laufen (docker compose up -d).",
+    "",
+    "Voraussetzungen:",
+    "  PostgreSQL MCP: npm / npx verfuegbar",
+    "  dbt MCP:        uv verfuegbar (pip install uv) + Python >= 3.12",
+    "  Airflow MCP:    uv verfuegbar (pip install uv)",
+    "  Metabase MCP:   npx verfuegbar + Metabase-Overlay aktiv (docker-compose.bi.yml)"
+  ],
+
+  "mcpServers": {
+
+    "postgres-demo": {
+      "_comment": "PostgreSQL MCP (offiziell, Anthropic): Schema-Inspektion, read-only SQL",
+      "_repo": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://demo_user:demo_pass@localhost:5432/demo"
+      ]
+    },
+
+    "dbt-demo": {
+      "_comment": "dbt MCP (offiziell, dbt Labs): run/test/compile, Lineage, YAML-Codegen",
+      "_repo": "https://github.com/dbt-labs/dbt-mcp",
+      "command": "uvx",
+      "args": ["dbt-mcp"],
+      "env": {
+        "DBT_PROJECT_DIR": "/ABSOLUTER/PFAD/ZU/new_env/dbt_project",
+        "DBT_PROFILES_DIR": "/ABSOLUTER/PFAD/ZU/new_env/dbt_project",
+        "DBT_MCP_ENABLE_DBT_CLI": "true",
+        "DBT_MCP_ENABLE_DBT_CODEGEN": "true",
+        "POSTGRES_HOST": "localhost"
+      }
+    },
+
+    "airflow-demo": {
+      "_comment": "Airflow MCP (Community): DAGs triggern, Logs, Status, Variablen",
+      "_repo": "https://github.com/yangkyeongmo/mcp-server-apache-airflow",
+      "command": "uvx",
+      "args": ["mcp-server-apache-airflow"],
+      "env": {
+        "AIRFLOW_BASE_URL": "http://localhost:8080",
+        "AIRFLOW_USERNAME": "admin",
+        "AIRFLOW_PASSWORD": "admin",
+        "AIRFLOW_API_GROUPS": "dag,dagrun,taskinstance,variable"
+      }
+    },
+
+    "metabase-demo": {
+      "_comment": "Metabase MCP (Community): Dashboards, Questions ausfuehren, Schema erkunden",
+      "_repo": "https://github.com/CognitionAI/metabase-mcp-server",
+      "_voraussetzung": "Metabase-Overlay muss laufen: docker-compose.bi.yml",
+      "command": "npx",
+      "args": ["-y", "@cognitionai/metabase-mcp-server"],
+      "env": {
+        "METABASE_URL": "http://localhost:3000",
+        "METABASE_USERNAME": "admin@demo.com",
+        "METABASE_PASSWORD": "admin2pistor"
+      }
+    }
+
+  }
+}

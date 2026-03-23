@@ -7,6 +7,10 @@
 # Login: admin@demo.com / admin2pistor
 # PostgreSQL-Verbindung "Demo (Data Vault)" wird automatisch eingerichtet.
 #
+# DuckDB-Unterstuetzung: Community-Plugin vorinstalliert (metabase/plugins/)
+#   DuckDB-Dateien in ./duckdb/ ablegen → im Container unter /duckdb/ erreichbar
+#   Verbindung in Metabase: Typ "DuckDB", Datenbankpfad z.B. /duckdb/meine.duckdb
+#
 # RAM-Bedarf: ca. 500-700 MB zusaetzlich
 
 services:
@@ -21,11 +25,18 @@ services:
       MB_DB_FILE: /metabase-data/metabase.db
       # Config-File fuer Admin-User und DB-Verbindung
       MB_CONFIG_FILE_PATH: /metabase-config/metabase-config.yml
+      # Plugins-Verzeichnis (DuckDB-Treiber)
+      MB_PLUGINS_DIR: /plugins
       # Java Heap begrenzen fuer RAM-sparenden Betrieb
       JAVA_OPTS: "-Xmx1024m"
     volumes:
       - metabase-data:/metabase-data
       - ./metabase/metabase-config.yml:/metabase-config/metabase-config.yml:ro
+      # DuckDB Community-Plugin (JAR liegt in ./metabase/plugins/ auf dem Host)
+      # Metabase braucht Schreibzugriff (extrahiert den JAR beim ersten Start)
+      - ./metabase/plugins:/plugins
+      # Lokale DuckDB-Dateien: hier ablegen, in Metabase als /duckdb/<datei>.duckdb einbinden
+      - ./duckdb:/duckdb
     depends_on:
       postgres:
         condition: service_healthy
