@@ -15,7 +15,9 @@ postgres-data/
 
 # IDE
 .vscode/
+.claude/
 *.code-workspace
+CLAUDE.md
 
 # OS
 .DS_Store
@@ -31,3 +33,4 @@ streamlit/.streamlit/secrets.toml
 # Environment
 .env
 metabase/mcp-api-key.txt
+
