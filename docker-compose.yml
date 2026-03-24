@@ -28,7 +28,6 @@ x-airflow-common:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/config:/opt/airflow/config
     - ./dbt_project:/usr/app/dbt
-    - dbt-packages:/usr/app/dbt/dbt_packages
     - ./daten:/data
     - airflow-logs:/opt/airflow/logs
   depends_on:
@@ -176,7 +175,7 @@ services:
       - -c
       - |
         mkdir -p /opt/airflow/{logs,dags,plugins,config} && \
-        chown -R airflow:root /usr/app/dbt/dbt_packages 2>/dev/null || true && \
+        chown -R airflow:root /usr/app/dbt 2>/dev/null || true && \
         airflow db migrate && \
         airflow users create \
           --username admin \
@@ -227,7 +226,6 @@ services:
       - "8081:8081"
     volumes:
       - ./dbt_project:/usr/app/dbt
-      - dbt-packages:/usr/app/dbt/dbt_packages
     depends_on:
       postgres:
         condition: service_healthy
@@ -277,7 +275,6 @@ volumes:
   postgres-data:
   airflow-logs:
   pgadmin-data:
-  dbt-packages:
 
 networks:
   demo-network:

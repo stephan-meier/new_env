@@ -23,7 +23,7 @@ with DAG(
 
     dbt_deps = BashOperator(
         task_id="dbt_deps",
-        bash_command=f"rm -rf {DBT_DIR}/dbt_packages && {DBT_CMD} deps --profiles-dir {DBT_DIR}",
+        bash_command=f"{DBT_CMD} deps --profiles-dir {DBT_DIR}",
     )
 
     dbt_seed = BashOperator(
