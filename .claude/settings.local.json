@@ -8,7 +8,11 @@
       "Bash(git commit:*)",
       "Bash(docker exec:*)",
       "Bash(docker ps:*)",
-      "WebSearch"
+      "WebSearch",
+      "Read(//Users/stephanmeier/.claude/projects/-Users-stephanmeier-Documents-work-new_env/memory/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/stephanmeier/.claude/projects/-Users-stephanmeier-Documents-work-new_env/memory"
     ]
   }
 }
