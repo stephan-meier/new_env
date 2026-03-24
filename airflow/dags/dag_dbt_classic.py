@@ -21,9 +21,16 @@ with DAG(
     tags=["dbt", "classic"],
 ) as dag:
 
+    # deps: Fallback fuer Windows, wo der airflow-User nicht in den
+    # Bind-Mount schreiben kann. dbt-docs (root) installiert Packages
+    # beim Start, daher reicht ein read-only Check als Fallback.
     dbt_deps = BashOperator(
         task_id="dbt_deps",
-        bash_command=f"{DBT_CMD} deps --profiles-dir {DBT_DIR}",
+        bash_command=(
+            f"{DBT_CMD} deps --profiles-dir {DBT_DIR} || "
+            f"(test -d {DBT_DIR}/dbt_packages/dbt_utils && "
+            f"echo 'WARN: dbt deps failed but packages already installed, continuing...')"
+        ),
     )
 
     dbt_seed = BashOperator(

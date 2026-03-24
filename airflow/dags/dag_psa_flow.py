@@ -58,7 +58,11 @@ with DAG(
     # --- Phase 3: dbt aus PSA aufbauen ---
     dbt_deps = BashOperator(
         task_id="dbt_deps",
-        bash_command=f"{DBT} deps --profiles-dir /usr/app/dbt",
+        bash_command=(
+            f"{DBT} deps --profiles-dir /usr/app/dbt || "
+            f"(test -d /usr/app/dbt/dbt_packages/dbt_utils && "
+            f"echo 'WARN: dbt deps failed but packages already installed, continuing...')"
+        ),
     )
 
     dbt_run_psa = BashOperator(
