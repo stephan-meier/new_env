@@ -101,8 +101,30 @@ if [ "$DB_COUNT" = "0" ]; then
       }' > /dev/null 2>&1
 fi
 
+# API Key fuer MCP erstellen (Claude Desktop / Claude Code)
+echo "Erstelle Metabase API Key fuer MCP..."
+API_KEY_RESPONSE=$(curl -s -X POST "$METABASE_URL/api/api-key" \
+  -H "Content-Type: application/json" \
+  -H "X-Metabase-Session: $SESSION_ID" \
+  -d '{"group_id":2,"name":"mcp-reader"}')
+
+MCP_API_KEY=$(echo "$API_KEY_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('unmasked_key',''))" 2>/dev/null)
+
+if [ -n "$MCP_API_KEY" ]; then
+    echo "$MCP_API_KEY" > "$(dirname "$0")/mcp-api-key.txt"
+    echo "API Key gespeichert: metabase/mcp-api-key.txt"
+else
+    echo "Hinweis: API Key konnte nicht erstellt werden (evtl. bereits vorhanden)"
+fi
+
 echo ""
 echo "Setup erfolgreich!"
 echo "  URL:   ${METABASE_URL}"
 echo "  Login: admin@demo.com / admin2pistor"
 echo "  DB:    Demo (Data Vault) - postgres:5432/demo"
+if [ -n "$MCP_API_KEY" ]; then
+    echo ""
+    echo "MCP API Key (fuer claude_desktop_config.json):"
+    echo "  METABASE_API_KEY: $MCP_API_KEY"
+    echo "  (auch gespeichert in metabase/mcp-api-key.txt)"
+fi

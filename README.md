@@ -101,8 +101,8 @@ MCP (Model Context Protocol) verbindet KI-Assistenten direkt mit dem Data Stack.
 
 **Weg 1 — Claude Desktop / Claude Code (einfachste Option):**
 ```bash
-# mcp/claude-desktop-config.json als Vorlage verwenden
-cp mcp/claude-desktop-config.json ~/.claude/claude_desktop_config.json
+# mcp/claude-desktop-config.json als Vorlage verwenden.  (MacOS!)
+cp mcp/claude-desktop-config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
 # Pfad zu dbt_project anpassen, dann Claude Desktop neu starten
 ```
 
@@ -139,10 +139,18 @@ docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
 
 Beim ersten Start (frisches Volume) das Setup-Script ausführen:
 ```bash
-# Wartet auf Metabase-Start und richtet Admin-User + DB-Verbindung ein
+# Wartet auf Metabase-Start und richtet Admin-User + DB-Verbindung + MCP API Key ein
 ./metabase/setup-metabase.sh
 ```
 Danach ist Metabase sofort einsatzbereit mit der PostgreSQL-Verbindung "Demo (Data Vault)" und allen Schemas (raw, staging, raw_vault, mart, dq).
+
+Das Script erstellt automatisch einen **API Key für den MCP-Server** (`metabase/mcp-api-key.txt`, gitignored). Den Key in `claude_desktop_config.json` eintragen:
+```bash
+cat metabase/mcp-api-key.txt
+# → mb_xxxx...  →  in claude_desktop_config.json unter METABASE_API_KEY eintragen
+```
+
+> **Hinweis:** Nach `docker compose down -v` (Volume-Reset) muss das Setup-Script erneut ausgeführt und der neue API Key eingetragen werden.
 
 ### Worker skalieren
 ```bash
@@ -319,13 +327,13 @@ Für einen sauberen Neustart einfach `init_raw_data` erneut triggern - der DAG m
 │  Optional (docker-compose.mcp.yml):                               │
 │  ┌──────────┐  ┌─────────────────────────────────────────────┐   │
 │  │Open WebUI│  │ MCP-Gateway :8200 (mcpo)                    │   │
-│  │  :3001   │◄─┤  /airflow  → mcp-server-apache-airflow      │   │
-│  │ + Ollama │  │  /dbt      → dbt-mcp (offiziell, dbt Labs)  │   │
-│  └──────────┘  └─────────────────────────────────────────────┘   │
+│  │  :3001   │◄─┤  /dbt      → dbt-mcp (offiziell, dbt Labs)  │   │
+│  │ + Ollama │  └─────────────────────────────────────────────┘   │
+│  └──────────┘                                                     │
 │                                                                   │
 │  Lokal auf Host (kein Docker):                                    │
 │  Claude Desktop / Claude Code mit mcp/claude-desktop-config.json │
-│  → PostgreSQL-MCP, dbt-MCP, Airflow-MCP, Metabase-MCP            │
+│  → PostgreSQL-MCP, dbt-MCP, Metabase-MCP                         │
 └───────────────────────────────────────────────────────────────────┘
 
 Lokale Volumes (gemountet):
@@ -417,6 +425,40 @@ environment:
 ```
 
 **In Airflow 2.x war das kein Problem**, weil der Webserver und Scheduler über die gemeinsame Datenbank kommunizierten und keine API-basierte Task-Execution stattfand.
+
+### REST API Authentifizierung in Airflow 3
+
+Airflow 3 hat die Authentifizierung für die **REST API** grundlegend geändert. Für den täglichen Betrieb ist es wichtig, zwei völlig unabhängige Auth-Systeme zu unterscheiden:
+
+| Zugang | Methode | Geändert? |
+|--------|---------|-----------|
+| **Web-UI (Browser)** | admin/admin wie bisher | Nein |
+| **REST API** (`/api/v2/...`) | Bearer Token (JWT) | **Ja** — Basic Auth entfernt |
+
+#### Web-UI: Keine Änderung
+
+Login über den Browser mit Benutzername und Passwort funktioniert wie in Airflow 2.x. Davon ist nichts betroffen.
+
+#### REST API: Nur noch Bearer Token
+
+In Airflow 2.x akzeptierte die API Basic Auth (Benutzername + Passwort direkt im Request). In Airflow 3 ist das **entfernt**. Wer die API programmatisch nutzt — eigene Skripte, MCP-Server, CI/CD Pipelines, externe Tools — muss zuerst einen Token holen:
+
+```bash
+# Schritt 1: Token holen (einmalig, gültig 24h)
+TOKEN=$(curl -s -X POST http://localhost:8080/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | \
+  python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# Schritt 2: Token bei jedem API-Call mitschicken
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v2/dags
+```
+
+#### Token-Ablauf im Betrieb
+
+Der Token ist **24 Stunden gültig**. Für eigene Skripte oder Tools die die API verwenden: Token einmal zu Beginn holen, dann für alle Calls des Tages verwenden. Läuft ein langlebiger Prozess länger als 24h, muss der Token erneuert werden.
+
+> **Airflow 3.1+:** Permanente API Keys (kein Ablauf) sind als experimentelles Feature in Vorbereitung und werden dieses Token-Handling künftig vereinfachen.
 
 ### Astronomer Cosmos + Airflow 3: Zwei kritische Bugs
 
@@ -1633,15 +1675,15 @@ KI-Client (Claude Desktop / Claude Code / Open WebUI + Ollama / Cursor)
        |
        |-- PostgreSQL MCP  → Schema-Inspektion, read-only SQL          [Anthropic, offiziell]
        |-- dbt MCP         → run/test/compile, Lineage, Codegen        [dbt Labs, offiziell]
-       |-- Airflow MCP     → DAGs triggern, Logs, Variablen, Status    [Community]
+       |-- Airflow MCP     → (noch kein reifer Airflow-3-Support)      [ausstehend]
        |-- Metabase MCP    → Dashboards, Questions, Schema erkunden    [Community]
 ```
 
 | MCP-Server | Offiziell? | Reife | Repo |
 |-----------|-----------|-------|------|
 | **PostgreSQL** | Anthropic | Stabil | [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers/tree/main/src/postgres) |
-| **dbt** | dbt Labs | Stabil | [dbt-labs/dbt-mcp](https://github.com/dbt-labs/dbt-mcp) |
-| **Airflow** | Community | Funktional | [yangkyeongmo/mcp-server-apache-airflow](https://github.com/yangkyeongmo/mcp-server-apache-airflow) |
+| **dbt** | dbt Labs | Stabil | [dbt-labs/dbt-mcp](https://github.com/dbt-labs/dbt-mcp) — siehe Hinweis unten |
+| **Airflow** | — | Ausstehend | Kein reifer Airflow-3-MCP verfügbar (Stand März 2026). Verfügbare Community-Server entweder API v1 only oder reine Navigations-/Dokumentations-Server ohne direkte Tool-Execution. Airflow bleibt bis auf weiteres über Web-UI und REST API zugänglich. |
 | **Metabase** | Community | Feature-reich | [CognitionAI/metabase-mcp-server](https://github.com/CognitionAI/metabase-mcp-server) |
 
 #### Option A: Claude Desktop / Claude Code (empfohlen für diese Demo)
@@ -1651,16 +1693,44 @@ Alle vier MCP-Server laufen als lokale Prozesse auf dem Host und verbinden sich 
 ```bash
 # Voraussetzungen
 npm install -g npx          # fuer PostgreSQL- und Metabase-MCP
-pip install uv              # fuer dbt-MCP und Airflow-MCP (uvx)
+pip install uv              # fuer dbt-MCP (uvx)
 
 # Konfiguration
-cp mcp/claude-desktop-config.json ~/.claude/claude_desktop_config.json
+cp mcp/claude-desktop-config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
 # Pfad zu new_env/dbt_project anpassen!
 ```
 
 **Wichtig:** `DBT_PROJECT_DIR` in der Config auf den absoluten Pfad zu `new_env/dbt_project` setzen.
 
-> **Sicherheitshinweis:** dbt-MCP und Airflow-MCP erlauben KI-Assistenten, Befehle auszuführen, die Datenbank-Objekte verändern können. In der Demo-Umgebung unkritisch, in Produktion die aktivierten Tool-Kategorien einschränken.
+> **Airflow MCP:** Es existiert aktuell kein reifer MCP-Server für Airflow 3. Airflow wird über die Web-UI (http://localhost:8080) bedient. DAG-Runs, Task-Instanzen und Logs sind über den `airflow-meta` PostgreSQL-MCP direkt abfragbar (Airflow-Metadaten-DB).
+
+#### dbt MCP — zwei Betriebsmodi
+
+Der dbt MCP Server verhält sich unterschiedlich je nachdem ob lokal eine dbt-Installation vorhanden ist:
+
+| Modus | Voraussetzung | Verfügbare Features |
+|-------|--------------|---------------------|
+| **Dockerisiert** (diese Demo) | dbt läuft in Docker, kein lokales Binary nötig | Codegen: `generate_model_yaml`, `generate_source`, `generate_staging_model` |
+| **Lokal mit dbt** | dbt in PATH oder `DBT_PATH` gesetzt (z.B. Conda-Env) | Zusätzlich: `dbt run`, `dbt test`, `dbt ls`, Lineage-Abfragen |
+
+**Dockerisierter Modus (Standard in dieser Demo):**
+
+dbt-mcp wird mit `DBT_MCP_ENABLE_DBT_CLI=false` und `DBT_PATH=/opt/anaconda3/envs/dbt/bin/dbt` gestartet. Das ist kein schmerzhafter Verlust — die fehlenden Features werden durch andere MCP-Server kompensiert:
+
+- **Lineage & Run-History** → `airflow-meta` PostgreSQL-MCP (Tabellen `dag_run`, `task_instance`)
+- **Schema & Datenqualität** → `postgres-demo` PostgreSQL-MCP (direkte Abfragen auf Mart-Tabellen)
+- **Was wirklich fehlt:** `dbt test` Ergebnisse live abfragen — diese landen aber in der `demo`-DB und sind via `postgres-demo` erreichbar
+
+**Lokaler Entwicklungsmodus (volle Funktionalität):**
+
+Wer dbt lokal installiert hat, aktiviert einfach CLI-Features in der Config:
+```json
+"DBT_MCP_ENABLE_DBT_CLI": "true",
+"DBT_PATH": "/opt/anaconda3/envs/dbt/bin/dbt"
+```
+Dann sind alle Tools verfügbar: Lineage, `dbt run/test/compile`, direkte Modell-Ausführung via Claude.
+
+> **Sicherheitshinweis:** dbt-MCP mit aktiviertem CLI erlaubt KI-Assistenten, dbt-Befehle auszuführen die Datenbank-Objekte verändern können. In der Demo-Umgebung unkritisch, in Produktion die aktivierten Tool-Kategorien einschränken.
 
 #### Option B: Open WebUI + Ollama (komplett lokal, kein Cloud-Dienst)
 
@@ -1686,9 +1756,8 @@ docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.
 
 **Open WebUI einrichten:**
 1. Einstellungen → Werkzeuge → OpenAPI-Server hinzufügen
-2. URL: `http://mcp-gateway:8200/airflow` → Airflow-Tools aktivieren
-3. URL: `http://mcp-gateway:8200/dbt` → dbt-Tools aktivieren
-4. Modell `qwen2.5:7b` auswählen und loschatten
+2. URL: `http://mcp-gateway:8200/dbt` → dbt-Tools aktivieren
+3. Modell `qwen2.5:7b` auswählen und loschatten
 
 > **RAM-Hinweis:** Open WebUI ~300 MB + MCP-Gateway ~500 MB. Ollama-Modell läuft auf dem Host (nicht in Docker). Gesamtbedarf mit allen Overlays: ~11 GB.
 

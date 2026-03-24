@@ -1,5 +1,7 @@
 packages:
   - package: Datavault-UK/automate_dv
-    version: "0.11.1"
-  - package: calogica/dbt_expectations
-    version: "0.10.4"
+    version: "0.11.5"
+  - package: metaplane/dbt_expectations
+    version: "0.10.10"
+  - package: dbt-labs/codegen
+    version: "0.14.0"

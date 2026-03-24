@@ -30,3 +30,4 @@ streamlit/.streamlit/secrets.toml
 
 # Environment
 .env
+metabase/mcp-api-key.txt

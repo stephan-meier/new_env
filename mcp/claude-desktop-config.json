@@ -1,7 +1,8 @@
 {
   "_anleitung": [
     "Template fuer Claude Desktop MCP-Konfiguration.",
-    "Datei: ~/.claude/claude_desktop_config.json  (macOS/Linux)",
+    "Datei: ~/Library/Application Support/Claude/claude_desktop_config.json  (macOS)",
+    "       ~/.claude/claude_desktop_config.json  (Linux ?)",
     "       %APPDATA%\\Claude\\claude_desktop_config.json  (Windows)",
     "",
     "WICHTIG: /ABSOLUTER/PFAD/ZU/new_env durch den tatsaechlichen Pfad ersetzen!",
@@ -10,8 +11,8 @@
     "Voraussetzungen:",
     "  PostgreSQL MCP: npm / npx verfuegbar",
     "  dbt MCP:        uv verfuegbar (pip install uv) + Python >= 3.12",
-    "  Airflow MCP:    uv verfuegbar (pip install uv)",
-    "  Metabase MCP:   npx verfuegbar + Metabase-Overlay aktiv (docker-compose.bi.yml)"
+    "  Metabase MCP:   npx verfuegbar + Metabase-Overlay aktiv (docker-compose.bi.yml)",
+    "  Airflow MCP:    Kein reifer Airflow-3-MCP verfuegbar (Stand 2026). Airflow ueber Web-UI verwalten."
   ],
 
   "mcpServers": {
@@ -23,7 +24,17 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "postgresql://demo_user:demo_pass@localhost:5432/demo"
+        "postgresql://mcp_reader:mcp_readonly@localhost:5432/demo"
+      ]
+    },
+
+    "airflow-meta": {
+      "_comment": "Airflow Metadaten-DB: DAG Runs, Task Instances, Logs, Variables, Connections",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://mcp_reader:mcp_readonly@localhost:5432/airflow"
       ]
     },
 
@@ -35,22 +46,10 @@
       "env": {
         "DBT_PROJECT_DIR": "/ABSOLUTER/PFAD/ZU/new_env/dbt_project",
         "DBT_PROFILES_DIR": "/ABSOLUTER/PFAD/ZU/new_env/dbt_project",
-        "DBT_MCP_ENABLE_DBT_CLI": "true",
+        "DBT_MCP_ENABLE_DBT_CLI": "false",
         "DBT_MCP_ENABLE_DBT_CODEGEN": "true",
+        "DBT_PATH": "/opt/anaconda3/envs/dbt/bin/dbt",
         "POSTGRES_HOST": "localhost"
-      }
-    },
-
-    "airflow-demo": {
-      "_comment": "Airflow MCP (Community): DAGs triggern, Logs, Status, Variablen",
-      "_repo": "https://github.com/yangkyeongmo/mcp-server-apache-airflow",
-      "command": "uvx",
-      "args": ["mcp-server-apache-airflow"],
-      "env": {
-        "AIRFLOW_BASE_URL": "http://localhost:8080",
-        "AIRFLOW_USERNAME": "admin",
-        "AIRFLOW_PASSWORD": "admin",
-        "AIRFLOW_API_GROUPS": "dag,dagrun,taskinstance,variable"
       }
     },
 
@@ -62,8 +61,7 @@
       "args": ["-y", "@cognitionai/metabase-mcp-server"],
       "env": {
         "METABASE_URL": "http://localhost:3000",
-        "METABASE_USERNAME": "admin@demo.com",
-        "METABASE_PASSWORD": "admin2pistor"
+        "METABASE_API_KEY": "METABASE_API_KEY_HIER_EINTRAGEN"
       }
     }
 
