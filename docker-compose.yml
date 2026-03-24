@@ -220,7 +220,7 @@ services:
     environment:
       POSTGRES_HOST: postgres
     command: >
-      sh -c "dbt deps && dbt docs generate --profiles-dir /usr/app/dbt &&
+      sh -c "dbt --log-path /tmp/dbt_logs deps && dbt --log-path /tmp/dbt_logs docs generate --profiles-dir /usr/app/dbt &&
              cd /usr/app/dbt/target && python -m http.server 8081 --bind 0.0.0.0"
     ports:
       - "8081:8081"
