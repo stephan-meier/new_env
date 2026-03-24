@@ -49,6 +49,7 @@ x-airflow-common:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/config:/opt/airflow/config
     - ./dbt_project:/usr/app/dbt
+    - dbt-target:/usr/app/dbt/target
     - ./daten:/data
     - airflow-logs:/opt/airflow/logs
   depends_on:
@@ -156,7 +157,9 @@ services:
       - -c
       - |
         mkdir -p /opt/airflow/{logs,dags,plugins,config} && \
-        chown -R airflow:root /usr/app/dbt 2>/dev/null || true && \
+        chmod 777 /usr/app/dbt/target && \
+        cp -rn /opt/airflow/dbt_target_cache/* /usr/app/dbt/target/ 2>/dev/null || true && \
+        chown -R airflow:root /usr/app/dbt/target 2>/dev/null || true && \
         airflow db migrate && \
         airflow users create \
           --username admin \
@@ -189,6 +192,7 @@ services:
       - "8081:8081"
     volumes:
       - ./dbt_project:/usr/app/dbt
+      - dbt-target:/usr/app/dbt/target
     depends_on:
       postgres:
         condition: service_healthy
@@ -226,7 +230,7 @@ services:
     volumes:
       - ./streamlit:/app
       - ./README.md:/README.md:ro
-      - ./dbt_project/target:/usr/app/dbt/target:ro
+      - dbt-target:/usr/app/dbt/target:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -238,6 +242,7 @@ volumes:
   postgres-data:
   airflow-logs:
   pgadmin-data:
+  dbt-target:
 
 networks:
   demo-network:

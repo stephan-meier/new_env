@@ -29,4 +29,9 @@ RUN /home/airflow/dbt_venv/bin/dbt deps && \
     POSTGRES_HOST=dummy /home/airflow/dbt_venv/bin/dbt ls --profiles-dir /usr/app/dbt --target dev 2>/dev/null; \
     /home/airflow/dbt_venv/bin/dbt parse --profiles-dir /usr/app/dbt --target dev 2>/dev/null || true
 
+# Manifest-Cache: target/ wird zur Laufzeit durch ein Named Volume ueberlagert.
+# airflow-init kopiert diesen Cache ins Volume, damit Cosmos beim ersten Start
+# die DAGs parsen kann (bevor ein dbt-Lauf das Manifest neu generiert).
+RUN cp -r /usr/app/dbt/target /opt/airflow/dbt_target_cache
+
 WORKDIR /opt/airflow
