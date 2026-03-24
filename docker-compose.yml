@@ -20,6 +20,8 @@ x-airflow-common:
     AIRFLOW_CONN_DEMO_POSTGRES: postgresql://demo_user:demo_pass@postgres:5432/demo
     # dbt profiles.yml nutzt POSTGRES_HOST
     POSTGRES_HOST: postgres
+    # dbt-Logs ausserhalb Bind-Mount (Windows: chown wird ignoriert)
+    DBT_LOG_PATH: /tmp/dbt_logs
     # Cosmos: dbt-ls-Cache aktiviert, aber Telemetrie-Propagation deaktiviert
     # weil Airflow 3.0 strikte Param-Validierung einen Hash-Mismatch bei
     # __cosmos_telemetry_metadata__ verursacht (bekannter Bug Cosmos <1.14)
@@ -219,8 +221,9 @@ services:
       dockerfile: Dockerfile.dbt
     environment:
       POSTGRES_HOST: postgres
+      DBT_LOG_PATH: /tmp/dbt_logs
     command: >
-      sh -c "dbt --log-path /tmp/dbt_logs deps && dbt --log-path /tmp/dbt_logs docs generate --profiles-dir /usr/app/dbt &&
+      sh -c "dbt deps && dbt docs generate --profiles-dir /usr/app/dbt &&
              cd /usr/app/dbt/target && python -m http.server 8081 --bind 0.0.0.0"
     ports:
       - "8081:8081"

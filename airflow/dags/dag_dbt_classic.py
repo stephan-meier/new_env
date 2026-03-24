@@ -10,9 +10,7 @@ from datetime import datetime
 
 DBT_DIR = "/usr/app/dbt"
 DBT_BIN = "/home/airflow/dbt_venv/bin/dbt"
-# --log-path /tmp/dbt_logs: Auf Windows-Bind-Mounts ist /usr/app/dbt/logs
-# root-owned und für den airflow-User nicht beschreibbar (chown wird ignoriert).
-DBT_CMD = f"cd {DBT_DIR} && {DBT_BIN} --log-path /tmp/dbt_logs"
+DBT_CMD = f"cd {DBT_DIR} && {DBT_BIN}"
 
 with DAG(
     dag_id="dbt_classic",
