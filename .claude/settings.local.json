@@ -3,7 +3,9 @@
     "allow": [
       "Bash(docker compose:*)",
       "Bash(python3 -c \"import sys,json; mounts=json.load\\(sys.stdin\\)[0][''''Mounts'''']; [print\\(m[''''Type''''],m.get\\(''''Name'''',''''''''\\),m[''''Destination'''']\\) for m in mounts]\")",
-      "Bash(docker volume:*)"
+      "Bash(docker volume:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
