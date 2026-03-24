@@ -39,7 +39,7 @@ dbt_cosmos_dag = DbtDag(
         emit_datasets=False,
     ),
     operator_args={
-        "install_deps": True,
+        "install_deps": False,  # Packages im Docker-Image vorinstalliert
     },
     schedule=None,
     start_date=datetime(2024, 1, 1),

@@ -20,6 +20,8 @@ Ein vollständiges Data-Vault-Modell auf Basis eines Northwind-ähnlichen Bestel
 - **`dbt_cosmos`** - Astronomer Cosmos parst das dbt-Projekt automatisch und erstellt **43 individuelle Airflow-Tasks** mit vollständigem Dependency-Graph. Retry und Monitoring auf Modell-Ebene. https://astronomer.github.io/astronomer-cosmos/index.html
 - **`cosmos_master` → `cosmos_orders` → `cosmos_marts`** - Aufgeteilte Cosmos-DAGs pro fachlicher Domain, verkettet über **Airflow Datasets**. Mit **DatasetOrTimeSchedule** (Cron-Fallback) und **Freshness-Checks** für robuste Pipelines. Siehe [Demo: DAG-Splitting mit Datasets](#demo-dag-splitting-mit-datasets-cosmos_split).
 
+> **Performance-Hinweis:** `dbt_classic` läuft in ~40s, `dbt_cosmos` in ~2 min. Cosmos erstellt pro Modell einen eigenen Task mit separatem dbt-Prozess (Startup, Parsing, Profil-Laden). Das ist der Preis für die Granularität (Retry, Monitoring, Parallelisierung auf Modell-Ebene). Mit dem experimentellen **Watcher Execution Mode** (ab Cosmos 1.11) lässt sich dieser Overhead auf nahezu Classic-Niveau reduzieren.
+
 ### Quelldaten
 Northwind-ähnliches Bestellsystem mit 5 Tabellen:
 

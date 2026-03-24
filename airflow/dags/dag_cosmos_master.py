@@ -88,7 +88,7 @@ with DAG(
             emit_datasets=False,
         ),
         operator_args={
-            "install_deps": True,
+            "install_deps": False,  # Packages im Docker-Image vorinstalliert
         },
     )
 

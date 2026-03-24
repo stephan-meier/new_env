@@ -40,7 +40,7 @@ with DAG(
 
     dbt_run_staging = BashOperator(
         task_id="dbt_run_staging",
-        bash_command=f"{DBT_CMD} run --select staging --profiles-dir {DBT_DIR}",
+        bash_command=f"{DBT_CMD} run --select staging --exclude tag:psa --profiles-dir {DBT_DIR}",
     )
 
     dbt_run_raw_vault = BashOperator(
