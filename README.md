@@ -95,39 +95,11 @@ Beim ersten Start passiert automatisch:
 | **pgAdmin** | http://localhost:5050 | admin@demo.com / admin |
 | **PostgreSQL** | localhost:5432 | demo_user / demo_pass / DB: demo |
 
-#### Optional: MCP + KI-Assistenz (Open WebUI + Ollama)
+#### Option 1: Metabase (BI + DQ-Dashboards)
 
-MCP (Model Context Protocol) verbindet KI-Assistenten direkt mit dem Data Stack. Zwei Nutzungswege:
-
-**Weg 1 — Claude Desktop / Claude Code (einfachste Option):**
-```bash
-# mcp/claude-desktop-config.json als Vorlage verwenden.  (MacOS!)
-cp mcp/claude-desktop-config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
-# Pfad zu dbt_project anpassen, dann Claude Desktop neu starten
-```
-
-**Weg 2 — Open WebUI + Ollama (Browser-Chat, komplett lokal):**
-```bash
-# Ollama auf dem Host: https://ollama.com
-ollama pull qwen2.5:7b   # ~4.7 GB
-
-# Mit MCP-Overlay starten
-docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
-```
-
-| Service | URL | Login |
-|---------|-----|-------|
-| **Open WebUI** | http://localhost:3001 | Beim ersten Start Account erstellen |
-| **MCP-Gateway API** | http://localhost:8200/docs | - |
-
-> **RAM-Hinweis:** Open WebUI + MCP-Gateway ca. +800 MB. Gesamtbedarf mit MCP-Overlay: ~10 GB.
-
-#### Optional: Metabase (BI + DQ-Dashboards)
-
-Metabase ist als **optionaler Overlay** verfügbar und ergänzt die Demo um ein professionelles BI-Tool für Dashboards auf den Mart-Tabellen und DQ-Visualisierung:
+Metabase ergänzt die Demo um ein professionelles BI-Tool für Dashboards auf den Mart-Tabellen und DQ-Visualisierung — und ist der empfohlene nächste Schritt nach dem Core-Stack:
 
 ```bash
-# Statt nur docker compose up:
 docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
 ```
 
@@ -135,22 +107,62 @@ docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
 |---------|-----|-------|
 | **Metabase** | http://localhost:3000 | admin@demo.com / admin2pistor |
 
-> **RAM-Hinweis:** Metabase benötigt ca. 500-700 MB zusätzlich. Gesamtbedarf mit Metabase: ~10 GB.
+> **RAM-Hinweis:** Metabase benötigt ca. 500-700 MB zusätzlich. Gesamtbedarf: ~10 GB.
 
-Beim ersten Start (frisches Volume) das Setup-Script ausführen:
+**Erster Start (frisches Volume):** Setup-Script ausführen — richtet Admin-User, PostgreSQL-Verbindung und MCP API Key automatisch ein:
 ```bash
-# Wartet auf Metabase-Start und richtet Admin-User + DB-Verbindung + MCP API Key ein
 ./metabase/setup-metabase.sh
 ```
-Danach ist Metabase sofort einsatzbereit mit der PostgreSQL-Verbindung "Demo (Data Vault)" und allen Schemas (raw, staging, raw_vault, mart, dq).
+Danach ist Metabase sofort einsatzbereit mit der Verbindung "Demo (Data Vault)" und allen Schemas (raw, staging, raw_vault, mart, dq).
 
-Das Script erstellt automatisch einen **API Key für den MCP-Server** (`metabase/mcp-api-key.txt`, gitignored). Den Key in `claude_desktop_config.json` eintragen:
+**MCP API Key** (für Claude Desktop Integration): Das Script speichert den Key in `metabase/mcp-api-key.txt` (gitignored):
 ```bash
 cat metabase/mcp-api-key.txt
 # → mb_xxxx...  →  in claude_desktop_config.json unter METABASE_API_KEY eintragen
 ```
 
-> **Hinweis:** Nach `docker compose down -v` (Volume-Reset) muss das Setup-Script erneut ausgeführt und der neue API Key eingetragen werden.
+**DuckDB-Dateien einbinden:** Das DuckDB Community-Plugin ist bereits vorinstalliert (`metabase/plugins/duckdb.metabase-driver.jar`). Dateien einfach in `./duckdb/` ablegen — das Verzeichnis ist in den Container gemountet:
+```bash
+cp meine_analyse.duckdb ./duckdb/
+# In Metabase: Einstellungen → Datenbanken → DuckDB → Pfad: /duckdb/meine_analyse.duckdb
+```
+
+**DQ-Monitoring:** Testergebnisse in PostgreSQL persistieren und in Metabase visualisieren:
+```bash
+# In Airflow UI: dq_persist_results triggern
+# → schreibt alle run_results.json nach dq.test_results
+# Dann in Metabase: http://localhost:3000 → Dashboards bauen
+# Beispiel-Abfragen und Vergleich Streamlit vs. Metabase → siehe Abschnitt "Datenqualität"
+```
+
+> **Hinweis:** Nach `docker compose down -v` (Volume-Reset) Setup-Script erneut ausführen und neuen API Key eintragen.
+
+#### Option 2: MCP + KI-Assistenz (Open WebUI + Ollama)
+
+MCP (Model Context Protocol) verbindet KI-Assistenten direkt mit dem Data Stack — als "Surprise Goodie" für den Ausblick auf AI-gestützte Datenpipelines.
+
+**Weg 1 — Claude Desktop / Claude Code (einfachste Option):**
+```bash
+# mcp/claude-desktop-config.json als Vorlage verwenden.  (MacOS!)
+cp mcp/claude-desktop-config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
+# Pfad zu dbt_project anpassen, Metabase API Key eintragen, dann Claude Desktop neu starten
+```
+
+**Weg 2 — Open WebUI + Ollama (Browser-Chat, komplett lokal):**
+```bash
+# Ollama auf dem Host: https://ollama.com
+ollama pull qwen2.5:7b   # ~4.7 GB
+
+# Mit MCP-Overlay starten (zusammen mit Core + Metabase empfohlen)
+docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml up -d
+```
+
+| Service | URL | Login |
+|---------|-----|-------|
+| **Open WebUI** | http://localhost:3001 | Beim ersten Start Account erstellen |
+| **MCP-Gateway API** | http://localhost:8200/docs | - |
+
+> **RAM-Hinweis:** Open WebUI + MCP-Gateway ca. +800 MB. Gesamtbedarf mit allem: ~11 GB.
 
 ### Worker skalieren
 ```bash
@@ -619,46 +631,13 @@ Die Demo bietet **zwei Wege** zur Visualisierung der Datenqualität:
 1. Streamlit-Tab zeigen: "So sieht das integriert aus"
 2. Metabase zeigen: "So sieht das in der Praxis aus - mit Historie und BI-Dashboards"
 
-#### Metabase einrichten (optional)
+> **Setup:** Metabase starten und einrichten → siehe [Option 1: Metabase](#option-1-metabase-bi--dq-dashboards) im Installations-Abschnitt.
 
-```bash
-# 1. Umgebung mit Metabase starten
-docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
+#### DuckDB-Dateien in Metabase
 
-# 2. Metabase Setup (nur bei frischem Volume noetig)
-./metabase/setup-metabase.sh
-#    → Erstellt Admin-User (admin@demo.com / admin2pistor)
-#    → Verbindet PostgreSQL "Demo (Data Vault)" automatisch
+DuckDB-Dateien aus `./duckdb/` sind direkt in Metabase verfügbar (Plugin vorinstalliert, Volume gemountet). Verbindung anlegen unter: Einstellungen → Datenbanken → DuckDB → Pfad: `/duckdb/dateiname.duckdb`
 
-# 3. Rohdaten laden und dbt ausfuehren (falls nicht schon geschehen)
-#    In Airflow UI: init_raw_data → dbt_classic triggern
-
-# 4. Testergebnisse in PostgreSQL persistieren
-#    In Airflow UI: dq_persist_results triggern
-#    Dieser DAG liest alle run_results.json und schreibt nach dq.test_results
-
-# 5. Metabase oeffnen: http://localhost:3000 → Dashboards bauen
-```
-
-#### DuckDB-Dateien in Metabase einbinden (optional)
-
-Das DuckDB Community-Plugin (v0.2.6) ist bereits vorinstalliert (`metabase/plugins/duckdb.metabase-driver.jar`). DuckDB-Dateien werden über ein Volume direkt in den Container gemountet:
-
-```bash
-# 1. DuckDB-Datei in ./duckdb/ ablegen (beliebiger Name)
-cp meine_analyse.duckdb ./duckdb/
-
-# 2. Metabase starten (Plugin wird automatisch beim ersten Start registriert)
-docker compose -f docker-compose.yml -f docker-compose.bi.yml up -d
-
-# 3. In Metabase neue Datenbankverbindung anlegen:
-#    Einstellungen → Datenbanken → Datenbank hinzufügen
-#    Typ:            DuckDB
-#    Name:           (frei waehlbar)
-#    Datenbankpfad:  /duckdb/meine_analyse.duckdb
-```
-
-> **Hinweis:** Der Ordner `./duckdb/` ist für `.gitignore` vorgesehen — DuckDB-Dateien werden nicht ins Repository eingecheckt. Die Verzeichnisstruktur bleibt erhalten (via `duckdb/HIER_DUCKDB_DATEIEN_ABLEGEN.txt`).
+> **Hinweis:** Der Ordner `./duckdb/` ist gitignored — DuckDB-Dateien werden nicht ins Repository eingecheckt.
 
 **DQ-Dashboard in Metabase (Beispiel-Abfragen):**
 
@@ -1686,23 +1665,7 @@ KI-Client (Claude Desktop / Claude Code / Open WebUI + Ollama / Cursor)
 | **Airflow** | — | Ausstehend | Kein reifer Airflow-3-MCP verfügbar (Stand März 2026). Verfügbare Community-Server entweder API v1 only oder reine Navigations-/Dokumentations-Server ohne direkte Tool-Execution. Airflow bleibt bis auf weiteres über Web-UI und REST API zugänglich. |
 | **Metabase** | Community | Feature-reich | [CognitionAI/metabase-mcp-server](https://github.com/CognitionAI/metabase-mcp-server) |
 
-#### Option A: Claude Desktop / Claude Code (empfohlen für diese Demo)
-
-Alle vier MCP-Server laufen als lokale Prozesse auf dem Host und verbinden sich mit den Docker-Containern über deren exposed Ports. Vorlage unter `mcp/claude-desktop-config.json`:
-
-```bash
-# Voraussetzungen
-npm install -g npx          # fuer PostgreSQL- und Metabase-MCP
-pip install uv              # fuer dbt-MCP (uvx)
-
-# Konfiguration
-cp mcp/claude-desktop-config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
-# Pfad zu new_env/dbt_project anpassen!
-```
-
-**Wichtig:** `DBT_PROJECT_DIR` in der Config auf den absoluten Pfad zu `new_env/dbt_project` setzen.
-
-> **Airflow MCP:** Es existiert aktuell kein reifer MCP-Server für Airflow 3. Airflow wird über die Web-UI (http://localhost:8080) bedient. DAG-Runs, Task-Instanzen und Logs sind über den `airflow-meta` PostgreSQL-MCP direkt abfragbar (Airflow-Metadaten-DB).
+> **Installation:** Siehe [Option 2: MCP + KI-Assistenz](#option-2-mcp--ki-assistenz-open-webui--ollama) im Installations-Abschnitt.
 
 #### dbt MCP — zwei Betriebsmodi
 
@@ -1723,53 +1686,20 @@ dbt-mcp wird mit `DBT_MCP_ENABLE_DBT_CLI=false` und `DBT_PATH=/opt/anaconda3/env
 
 **Lokaler Entwicklungsmodus (volle Funktionalität):**
 
-Wer dbt lokal installiert hat, aktiviert einfach CLI-Features in der Config:
+In der Praxis findet die dbt-Entwicklung lokal statt — mit VSCode, dbt Power User Extension und einem externen Code-Generator (in dieser Demo NG Generator, in Produktion z.B. ITB). Der Workflow:
+
+```
+Lokal (VSCode + dbt + MCP)  →  git push  →  DEV/INT/PROD (Docker, nur Execution via Airflow)
+```
+
+Wer dbt lokal installiert hat (z.B. via Conda), aktiviert CLI-Features in der MCP-Config:
 ```json
 "DBT_MCP_ENABLE_DBT_CLI": "true",
 "DBT_PATH": "/opt/anaconda3/envs/dbt/bin/dbt"
 ```
-Dann sind alle Tools verfügbar: Lineage, `dbt run/test/compile`, direkte Modell-Ausführung via Claude.
+Dann sind alle Tools verfügbar: Lineage, `dbt run/test/compile`, direkte Modell-Ausführung via Claude — ergänzend zu VSCode und dbt Power User.
 
 > **Sicherheitshinweis:** dbt-MCP mit aktiviertem CLI erlaubt KI-Assistenten, dbt-Befehle auszuführen die Datenbank-Objekte verändern können. In der Demo-Umgebung unkritisch, in Produktion die aktivierten Tool-Kategorien einschränken.
-
-#### Option B: Open WebUI + Ollama (komplett lokal, kein Cloud-Dienst)
-
-Als Docker-Overlay ergänzt `docker-compose.mcp.yml` die Demo um einen Browser-Chat mit lokalem Ollama und einen MCP-Gateway, der Airflow-MCP und dbt-MCP als HTTP-Endpoints bereitstellt:
-
-```bash
-# 1. Ollama installieren (falls noch nicht vorhanden): https://ollama.com
-# 2. Empfohlenes Modell laden (Tool Calling erforderlich):
-ollama pull qwen2.5:7b      # ~4.7 GB, sehr gut fuer Tool Calling
-# oder:
-ollama pull llama3.1:8b     # ~4.9 GB, Alternative
-
-# 3. MCP-Overlay starten (zusammen mit Core + BI):
-docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml up -d
-
-# Beim ersten Start: MCP-Gateway-Image wird gebaut (~3-5 Min.)
-```
-
-| Service | URL | Beschreibung |
-|---------|-----|-------------|
-| **Open WebUI** | http://localhost:3001 | Browser-Chat mit Ollama |
-| **MCP-Gateway** | http://localhost:8200 | OpenAPI-Docs: /docs |
-
-**Open WebUI einrichten:**
-1. Einstellungen → Werkzeuge → OpenAPI-Server hinzufügen
-2. URL: `http://mcp-gateway:8200/dbt` → dbt-Tools aktivieren
-3. Modell `qwen2.5:7b` auswählen und loschatten
-
-> **RAM-Hinweis:** Open WebUI ~300 MB + MCP-Gateway ~500 MB. Ollama-Modell läuft auf dem Host (nicht in Docker). Gesamtbedarf mit allen Overlays: ~11 GB.
-
-#### Stoppen und Aufräumen mit MCP-Overlay
-
-```bash
-# Stoppen (Daten bleiben erhalten)
-docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml down
-
-# Stoppen + alle Daten löschen
-docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml down -v
-```
 
 #### Demo-Szenarien mit MCP
 
