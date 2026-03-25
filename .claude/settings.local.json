@@ -11,7 +11,19 @@
       "WebSearch",
       "Read(//Users/stephanmeier/.claude/projects/-Users-stephanmeier-Documents-work-new_env/memory/**)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/health)",
-      "Bash(curl -s http://localhost:8080/api/v2/monitor/health)"
+      "Bash(curl -s http://localhost:8080/api/v2/monitor/health)",
+      "Bash(python3 -c \"import site; print\\(''\\\\n''.join\\(site.getsitepackages\\(\\)\\)\\)\")",
+      "Bash(grep -r \"dbt parse\\\\|dbt ls\\\\|manifest\" /Users/stephanmeier/Documents/work/new_env --include=*.sh --include=*.yml --include=*.yaml)",
+      "Read(//opt/anaconda3/envs/dbt/lib/python3.12/site-packages/**)",
+      "Read(//opt/anaconda3/envs/**)",
+      "Bash(python3 -c \"from cosmos.constants import LoadMode; import inspect; print\\(''Available LoadMode options:''\\); print\\([attr for attr in dir\\(LoadMode\\) if not attr.startswith\\(''_''\\)]\\)\")",
+      "WebFetch(domain:astronomer.io)",
+      "WebFetch(domain:astronomer.github.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(grep -r \"BashOperator\\\\|bash_command\" /Users/stephanmeier/Documents/work/new_env/airflow/dags/*.py)",
+      "WebFetch(domain:www.phdata.io)",
+      "WebFetch(domain:www.astronomer.io)",
+      "Bash(ls /Users/stephanmeier/Documents/work/new_env/airflow/dags/dag_*.py)"
     ],
     "additionalDirectories": [
       "/Users/stephanmeier/.claude/projects/-Users-stephanmeier-Documents-work-new_env/memory"

@@ -182,6 +182,8 @@ services:
         chmod 777 /usr/app/dbt/target && \
         cp -rn /opt/airflow/dbt_target_cache/* /usr/app/dbt/target/ 2>/dev/null || true && \
         chown -R airflow:root /usr/app/dbt/target 2>/dev/null || true && \
+        echo "Generating fresh dbt manifest..." && \
+        su airflow -c "cd /usr/app/dbt && /home/airflow/dbt_venv/bin/dbt deps --profiles-dir /usr/app/dbt 2>/dev/null && /home/airflow/dbt_venv/bin/dbt parse --profiles-dir /usr/app/dbt --target dev 2>/dev/null" || true && \
         airflow db migrate && \
         airflow users create \
           --username admin \

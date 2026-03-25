@@ -516,7 +516,7 @@ project_config=ProjectConfig(
 )
 ```
 
-Das Manifest wird im Dockerfile mit `dbt parse` generiert und per Volume-Mount bereitgestellt. **Vorteil**: Sofortiges DAG-Parsing ohne Subprocess-Aufruf.
+Das Manifest wird beim Container-Start (`airflow-init`) und bei Bedarf im laufenden Betrieb generiert. Dazu den Utility-DAG **`refresh_cosmos_manifest`** in der Airflow UI triggern — kein Restart oder Docker-Rebuild nötig. Der nächste DAG-Parse-Zyklus (~5 Min) übernimmt die Änderungen automatisch. **Vorteil**: Sofortiges DAG-Parsing ohne Subprocess-Aufruf.
 
 > **Beide Probleme existieren in Airflow 2.x nicht**, weil dort (a) die Param-Validierung weniger strikt ist und (b) längere Parse-Zeiten toleriert werden.
 
@@ -1451,8 +1451,9 @@ Cosmos selektiert die Modelle per `select=["tag:domain_master"]` etc.
 ### Demo-Ablauf
 
 ```bash
-# 1. Umgebung neu bauen (Manifest mit Tags regenerieren)
-docker compose up -d --build
+# 1. Umgebung starten (Manifest wird beim Start automatisch generiert)
+docker compose up -d
+# Bei Modellaenderungen im laufenden Betrieb: DAG 'refresh_cosmos_manifest' triggern
 
 # 2. Rohdaten laden
 #    In Airflow UI: init_raw_data triggern

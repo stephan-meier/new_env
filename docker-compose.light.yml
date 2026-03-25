@@ -33,6 +33,7 @@ x-airflow-common:
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://demo_user:demo_pass@postgres:5432/airflow
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__MAX_TEMPLATED_FIELD_LENGTH: "100000"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-apiserver:8080/execution/"
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
@@ -160,6 +161,8 @@ services:
         chmod 777 /usr/app/dbt/target && \
         cp -rn /opt/airflow/dbt_target_cache/* /usr/app/dbt/target/ 2>/dev/null || true && \
         chown -R airflow:root /usr/app/dbt/target 2>/dev/null || true && \
+        echo "Generating fresh dbt manifest..." && \
+        su airflow -c "cd /usr/app/dbt && /home/airflow/dbt_venv/bin/dbt deps --profiles-dir /usr/app/dbt 2>/dev/null && /home/airflow/dbt_venv/bin/dbt parse --profiles-dir /usr/app/dbt --target dev 2>/dev/null" || true && \
         airflow db migrate && \
         airflow users create \
           --username admin \

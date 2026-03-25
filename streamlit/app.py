@@ -1299,23 +1299,22 @@ with tab_devtips:
     # --- Cosmos Manifest aktualisieren ---
     st.subheader("5. Nach Modelländerungen: Cosmos Manifest aktualisieren")
     st.markdown("""
-    Der `dbt_cosmos` DAG verwendet `LoadMode.DBT_MANIFEST` und liest ein
-    vorbereitetes `manifest.json`. Nach Änderungen an den dbt-Modellen
-    muss dieses Manifest aktualisiert werden:
+    Die Cosmos DAGs verwenden `LoadMode.DBT_MANIFEST` und lesen ein
+    vorbereitetes `manifest.json`. Nach Aenderungen an dbt-Modellen
+    muss dieses Manifest aktualisiert werden — **ohne Airflow-Restart
+    oder Docker-Rebuild:**
     """)
     st.code(
-        "# 1. Lokal Manifest generieren:\n"
-        "cd dbt_project && dbt parse\n"
-        "\n"
-        "# 2. Airflow-Image neu bauen (Manifest wird eingebacken):\n"
-        "docker compose build airflow-init\n"
-        "\n"
-        "# 3. Airflow-Services neu starten:\n"
-        "docker compose up -d",
+        "# In Airflow UI: DAG 'refresh_cosmos_manifest' triggern\n"
+        "# Oder per CLI:\n"
+        "docker compose exec airflow-worker bash -c \\\n"
+        "  'cd /usr/app/dbt && /home/airflow/dbt_venv/bin/dbt parse \\\n"
+        "   --profiles-dir /usr/app/dbt --target dev'",
         language="bash",
     )
-    st.warning(
-        "Ohne Manifest-Update sieht der Cosmos DAG die neuen Modelle nicht! "
+    st.info(
+        "Der DAG-Processor liest das Manifest beim naechsten Parse-Zyklus "
+        "(ca. alle 5 Min) automatisch ein. Kein Restart noetig! "
         "Der `dbt_classic` DAG ist davon nicht betroffen (nutzt BashOperator)."
     )
 
@@ -1424,7 +1423,8 @@ with tab_devtips:
             "Lokal: `dbt debug --profiles-dir .` ausführen.",
             "DAG-Processor braucht bis zu 30s. Syntax prüfen: "
             "`docker compose exec airflow-scheduler python -c \"exec(open('/opt/airflow/dags/datei.py').read())\"` ",
-            "`dbt parse` lokal ausführen, dann `docker compose build airflow-init && docker compose up -d`",
+            "DAG `refresh_cosmos_manifest` in Airflow triggern. "
+            "Beim naechsten Parse-Zyklus (~5 Min) werden die neuen Modelle sichtbar.",
             "Zuerst `dbt run --select staging` ausführen, dann Raw Vault. "
             "Oder: `dbt run --full-refresh` für einen Neuaufbau.",
             "`docker compose logs <service>` prüfen. "
