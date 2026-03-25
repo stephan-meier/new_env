@@ -1,0 +1,7 @@
+Version: 2
+variables:
+    dbt_project: '/dbt_project'
+    source_db: 'demo'
+    sql_template: 'acc_view_sql.tmpl'
+    dag_template: 'acc_gen_dag.tmpl'
+    dbt_template: 'acc_view_dbt.tmpl'

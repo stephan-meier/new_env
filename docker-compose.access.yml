@@ -1,0 +1,32 @@
+# Optional Overlay: dbt Access - Data Vault View Builder
+#
+# Nutzung:
+#   docker compose -f docker-compose.yml -f docker-compose.access.yml up -d
+#
+# dbt Access: http://localhost:8502
+#
+# Liest das dbt-Projekt (manifest.json, catalog.json) aus dem shared dbt-target Volume.
+# Voraussetzung: dbt compile + dbt docs generate muss einmal gelaufen sein.
+#
+# RAM-Bedarf: ca. 100-150 MB zusaetzlich
+
+services:
+
+  dbt-access:
+    build:
+      context: ./dbt-access
+      dockerfile: Dockerfile
+    ports:
+      - "8502:8501"
+    volumes:
+      # dbt-Projekt: Sources + compiled Target aus shared Volumes
+      - ./dbt_project:/dbt_project:ro
+      - dbt-target:/dbt_project/target:ro
+    environment:
+      - ACC_SETTINGS=./access/acc_settings.yml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    networks:
+      - demo-network

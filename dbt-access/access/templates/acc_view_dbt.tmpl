@@ -1,0 +1,65 @@
+{#- dbt Access - View Template (dbt-Modus mit ref()) -#}
+{#- Variablen: view_name, satellites, ctes, joins, select_columns, non_dv_tables, missing, use_pit, generated_at -#}
+-- ============================================================
+-- dbtAccess Generated View: {{ view_name }}
+-- Target: {{ target }}
+-- Generated: {{ generated_at }}
+-- Satellites: {{ satellites | join(', ') }}
+{%- if missing %}
+-- ACHTUNG: {{ missing | length }} fehlende Constraint(s)
+{%- endif %}
+-- ============================================================
+
+{{ '{{' }} config(materialized='view') {{ '}}' }}
+
+{%- if ctes %}
+
+WITH {% for cte in ctes %}
+{%- if cte.type == 'sat_rownumber' %}
+{{ cte.alias }} AS (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY {{ cte.pk }} ORDER BY {{ cte.ldts }} DESC) AS rn
+    FROM {{ '{{' }} ref('{{ cte.name }}') {{ '}}' }}
+){{ ',' if not loop.last }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+SELECT
+{%- for col in select_columns %}
+{%- if col.comment != col.get('_prev_comment', '') %}
+    -- {{ col.comment }}
+{%- endif %}
+    {{ col.alias }}.{{ col.column }}{{ ',' if not loop.last }}
+{%- endfor %}
+
+FROM {{ '{{' }} ref('{{ anchor_hub }}') {{ '}}' }} {{ anchor_alias }}
+{%- for join in joins %}
+{%- if join.type == 'hub_sat' and not join.get('pit') %}
+INNER JOIN {{ join.sat }}_current {{ join.sat_alias }}
+    ON {{ join.hub_alias }}.{{ join.pk }} = {{ join.sat_alias }}.{{ join.pk }} AND {{ join.sat_alias }}.rn = 1
+{%- elif join.type == 'hub_sat' and join.get('pit') %}
+INNER JOIN {{ '{{' }} ref('{{ join.pit }}') {{ '}}' }} pit_{{ join.hub_alias }}
+    ON {{ join.hub_alias }}.{{ join.pk }} = pit_{{ join.hub_alias }}.{{ join.pk }}
+INNER JOIN {{ '{{' }} ref('{{ join.sat }}') {{ '}}' }} {{ join.sat_alias }}
+    ON pit_{{ join.hub_alias }}.{{ join.pk }} = {{ join.sat_alias }}.{{ join.pk }}
+    AND pit_{{ join.hub_alias }}.sat_{{ join.sat | replace('sat_', '') }}_ldts = {{ join.sat_alias }}.{{ join.ldts }}
+{%- elif join.type == 'link' %}
+INNER JOIN {{ '{{' }} ref('{{ join.link }}') {{ '}}' }} {{ join.link_alias }}
+    ON {{ join.from_alias }}.{{ join.from_pk }} = {{ join.link_alias }}.{{ join.from_pk }}
+INNER JOIN {{ '{{' }} ref('{{ join.to_hub }}') {{ '}}' }} {{ join.to_alias }}
+    ON {{ join.link_alias }}.{{ join.to_pk }} = {{ join.to_alias }}.{{ join.to_pk }}
+{%- elif join.type == 'link_sat' %}
+INNER JOIN {{ join.sat }}_current {{ join.sat_alias }}
+    ON {{ join.link_alias }}.{{ join.pk }} = {{ join.sat_alias }}.{{ join.pk }} AND {{ join.sat_alias }}.rn = 1
+{%- elif join.type == 'missing' %}
+LEFT JOIN {{ '{{' }} ref('{{ join.hub }}') {{ '}}' }} {{ join.hub_alias }}
+    ON /* ERROR, MISSING CONSTRAINT - {{ join.message }} */
+{%- endif %}
+{%- endfor %}
+{%- if non_dv_tables %}
+{%- for tbl in non_dv_tables %}
+CROSS JOIN {{ '{{' }} ref('{{ tbl.name }}') {{ '}}' }} {{ tbl.alias }}
+    /* Moeglicher CROSS JOIN oder ERROR, MISSING CONSTRAINT - JOIN-Bedingung fuer {{ tbl.name }} ergaenzen */
+{%- endfor %}
+{%- endif %}

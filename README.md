@@ -166,6 +166,34 @@ docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.
 
 > **RAM-Hinweis:** Open WebUI + MCP-Gateway ca. +800 MB. Gesamtbedarf mit allem: ~11 GB.
 
+#### Option 3: dbt Access (Data Vault View Builder)
+
+dbt Access analysiert das kompilierte dbt-Projekt (manifest.json + catalog.json) und generiert automatisch Access Views auf dem Raw Vault — mit korrekten JOINs, PIT-Unterstützung und Alias-System:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.access.yml up -d
+```
+
+| Service | URL | Login |
+|---------|-----|-------|
+| **dbt Access** | http://localhost:8502 | - |
+
+> **RAM-Hinweis:** dbt Access benötigt ca. 100-150 MB zusätzlich.
+
+**Features:**
+- **Übersicht** über alle erkannten Hubs, Links, Satellites und PITs
+- **View-Generierung** per Satellite-Auswahl: dbt (mit `ref()`) oder plain SQL
+- **Automatische JOIN-Auflösung** über Link-Tabellen zwischen Hubs
+- **PIT-Constraints** optional aktivierbar (statt ROW_NUMBER)
+- **Mermaid Query-Graph** zeigt die beteiligten DV-Objekte nach Generierung
+
+**Voraussetzung:** `dbt compile` und `dbt docs generate` müssen einmal gelaufen sein (passiert automatisch beim ersten DAG-Run).
+
+**Kombiniert mit allen Overlays:**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml -f docker-compose.access.yml up -d
+```
+
 ### Worker skalieren
 ```bash
 # Mehrere Celery-Worker starten (z.B. 3 parallele Worker)
@@ -180,11 +208,13 @@ docker compose up -d --scale airflow-worker=3
 docker compose down
 # Mit Metabase:
 docker compose -f docker-compose.yml -f docker-compose.bi.yml down
+# Mit allen Overlays:
+docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml -f docker-compose.access.yml down
 
 # Stoppen + alle Daten löschen (frischer Neustart)
 docker compose down -v
-# Mit Metabase:
-docker compose -f docker-compose.yml -f docker-compose.bi.yml down -v
+# Mit allen Overlays:
+docker compose -f docker-compose.yml -f docker-compose.bi.yml -f docker-compose.mcp.yml -f docker-compose.access.yml down -v
 ```
 
 ---
@@ -344,6 +374,12 @@ Für einen sauberen Neustart einfach `init_raw_data` erneut triggern - der DAG m
 │  │  :3001   │◄─┤  /dbt      → dbt-mcp (offiziell, dbt Labs)  │   │
 │  │ + Ollama │  └─────────────────────────────────────────────┘   │
 │  └──────────┘                                                     │
+│                                                                   │
+│  Optional (docker-compose.access.yml):                            │
+│  ┌────────────┐                                                   │
+│  │ dbt Access │  Data Vault View Builder (Streamlit)              │
+│  │   :8502    │  Liest: dbt-target Volume (manifest + catalog)    │
+│  └────────────┘                                                   │
 │                                                                   │
 │  Lokal auf Host (kein Docker):                                    │
 │  Claude Desktop / Claude Code mit mcp/claude-desktop-config.json │
@@ -563,6 +599,7 @@ new_env/
 ├── docker-compose.yml          # Core: 11 Services (Postgres, Redis, 6x Airflow, dbt-docs, pgAdmin, Streamlit)
 ├── docker-compose.bi.yml       # Optional: Metabase für BI + DQ-Dashboards (~+700 MB)
 ├── docker-compose.mcp.yml      # Optional: Open WebUI + MCP-Gateway für KI-Assistenz (~+800 MB)
+├── docker-compose.access.yml   # Optional: dbt Access View Builder (~+150 MB)
 ├── Dockerfile.airflow          # Airflow 3 + Cosmos + dbt (isolierter venv)
 ├── Dockerfile.dbt              # dbt für Docs-Server
 ├── Dockerfile.mcp              # MCP-Gateway (mcpo + dbt-mcp + airflow-mcp)
@@ -583,6 +620,10 @@ new_env/
 │   ├── metabase-config.yml     # Admin-User + PostgreSQL-Verbindung (auto-setup)
 │   ├── plugins/                # Community-Plugins (duckdb.metabase-driver.jar)
 │   └── setup-metabase.sh       # Einrichtungs-Script (erster Start)
+├── dbt-access/
+│   ├── Dockerfile              # Python 3.12 + Streamlit
+│   ├── build.sh                # Update-Script (kopiert aktuelle Dateien aus ng_work)
+│   └── access/                 # Templates, Settings, Parser
 ├── duckdb/                     # DuckDB-Dateien hier ablegen → /duckdb/ im Container
 ├── postgres/init/              # DB-Init-Scripte (Schemas inkl. dq)
 └── streamlit/                  # Portal-App

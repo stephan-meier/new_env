@@ -1,0 +1,11 @@
+Version: 2
+environment_name: 'dbtAccess'
+base_dir: './access/'
+results_dir: './access/results/'
+doc_dir: './doc/'
+doc_file_name: 'dbt_access_doc.html'
+log_file: './dbt_access.log'
+variables_file: './access/variables.yml'
+credentials_file: './access/sql_credentials.yml'
+template_dir: './access/templates/'
+target: 'postgres'                    # postgres | snowflake

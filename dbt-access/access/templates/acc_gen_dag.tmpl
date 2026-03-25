@@ -1,0 +1,47 @@
+from airflow import DAG
+from airflow.operators.python import PythonOperator, get_current_context, task
+from airflow.operators.mssql_operator import MsSqlOperator    
+from airflow.utils.dates import days_ago
+from airflow.models.baseoperator import chain
+import jinja2
+
+default_arg = {'owner': 'airflow'
+}
+
+dag = DAG(
+    '{{ v_name }}_DEMO_2',
+    default_args=default_arg,
+    description='{{ v_name }}',
+    schedule_interval='*/2 * * * *',
+    start_date=days_ago(2),
+    tags= {{ v_tags }},
+    catchup=False
+)
+
+{% for job in v_queries -%}
+{% for qry in job['tasks'] -%}
+sql_{{ qry['task_id'] }} = f"""
+ {{- qry['code'] }}
+ """
+ 
+{{ qry['task_id'] }} = MsSqlOperator(
+         task_id='{{ qry['task_name'] }}',
+         mssql_conn_id='itx_sqls',
+         sql=sql_{{ qry['task_id'] }},            
+         autocommit=True,
+         split_statements=True,
+         database='NGDWA',
+         dag=dag
+)
+
+{% endfor -%}
+{%- endfor %}
+
+chain({{ v_chain}})
+
+
+
+
+
+
+

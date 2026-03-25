@@ -1,0 +1,19 @@
+{# ----------------------------------------------------------------------------------- #}
+{# Basis Template, das eine rohe dbt Access View mit allen Feldern bereitstellt        #}    
+{# ----------------------------------------------------------------------------------- #}
+
+{{ config(materialized='view') }}
+
+/* --------------------------------------- */
+/* manueller Pre/Post-Code                 */
+/* --------------------------------------- */
+{{ config(
+    pre_hook="SQL-statement" | ["SQL-statement"],
+    post_hook="SQL-statement" | ["SQL-statement"],
+) }}
+
+/* ---------------------------------------- */
+/* base query mit dbt Referenzen.           */
+/* ---------------------------------------- */
+
+
