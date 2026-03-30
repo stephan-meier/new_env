@@ -7,7 +7,8 @@
 # Login: admin@demo.com / admin2pistor
 # PostgreSQL-Verbindung "Demo (Data Vault)" wird automatisch eingerichtet.
 #
-# DuckDB-Unterstuetzung: Community-Plugin vorinstalliert (metabase/plugins/)
+# DuckDB-Unterstuetzung: Community-Plugin wird automatisch heruntergeladen
+#   Version pinnen: DUCKDB_DRIVER_VERSION im metabase-plugins-init Service anpassen
 #   DuckDB-Dateien in ./duckdb/ ablegen → im Container unter /duckdb/ erreichbar
 #   Verbindung in Metabase: Typ "DuckDB", Datenbankpfad z.B. /duckdb/meine.duckdb
 #
@@ -15,8 +16,32 @@
 
 services:
 
+  # Init-Container: laedt DuckDB Community-Plugin herunter (versioniert, nur bei Bedarf)
+  metabase-plugins-init:
+    image: curlimages/curl:8.12.1
+    user: "0:0"
+    volumes:
+      - metabase-plugins:/plugins
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        DUCKDB_DRIVER_VERSION=1.4.4.0
+        VERSION_FILE=/plugins/.duckdb-driver-version
+        JAR=/plugins/duckdb.metabase-driver.jar
+        if [ -f "$$VERSION_FILE" ] && [ "$$(cat $$VERSION_FILE)" = "$$DUCKDB_DRIVER_VERSION" ]; then
+          echo "DuckDB driver $$DUCKDB_DRIVER_VERSION already present, skipping download"
+        else
+          echo "Downloading DuckDB Metabase driver $$DUCKDB_DRIVER_VERSION..."
+          curl -fL -o "$$JAR" \
+            "https://github.com/motherduckdb/metabase_duckdb_driver/releases/download/$$DUCKDB_DRIVER_VERSION/duckdb.metabase-driver.jar"
+          echo "$$DUCKDB_DRIVER_VERSION" > "$$VERSION_FILE"
+          echo "DuckDB driver $$DUCKDB_DRIVER_VERSION installed"
+        fi
+        chmod -R 777 /plugins
+    networks: []
+
   metabase:
-    image: metabase/metabase:latest
+    build: ./metabase
     ports:
       - "3000:3000"
     environment:
@@ -25,24 +50,25 @@ services:
       MB_DB_FILE: /metabase-data/metabase.db
       # Config-File fuer Admin-User und DB-Verbindung
       MB_CONFIG_FILE_PATH: /metabase-config/metabase-config.yml
-      # Plugins-Verzeichnis (DuckDB-Treiber)
+      # Plugins-Verzeichnis (DuckDB-Treiber aus Init-Container)
       MB_PLUGINS_DIR: /plugins
       # Java Heap begrenzen fuer RAM-sparenden Betrieb
-      JAVA_OPTS: "-Xmx1024m"
+      JAVA_OPTS: "-Xmx2048m"
     volumes:
       - metabase-data:/metabase-data
+      - metabase-plugins:/plugins
       - ./metabase/metabase-config.yml:/metabase-config/metabase-config.yml:ro
-      # DuckDB Community-Plugin (JAR liegt in ./metabase/plugins/ auf dem Host)
-      # Metabase braucht Schreibzugriff (extrahiert den JAR beim ersten Start)
-      - ./metabase/plugins:/plugins
       # Lokale DuckDB-Dateien: hier ablegen, in Metabase als /duckdb/<datei>.duckdb einbinden
       - ./duckdb:/duckdb
     depends_on:
       postgres:
         condition: service_healthy
+      metabase-plugins-init:
+        condition: service_completed_successfully
     restart: always
     networks:
       - demo-network
 
 volumes:
   metabase-data:
+  metabase-plugins:

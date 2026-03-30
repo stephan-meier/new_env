@@ -30,6 +30,12 @@ airflow/plugins/
 # Streamlit
 streamlit/.streamlit/secrets.toml
 
+# DuckDB
+duckdb/*.duckdb
+
+# Metabase Plugins (werden per Init-Container heruntergeladen)
+metabase/plugins/*.jar
+
 # Environment
 .env
 metabase/mcp-api-key.txt
