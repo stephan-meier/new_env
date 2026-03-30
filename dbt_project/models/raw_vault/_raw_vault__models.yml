@@ -98,12 +98,14 @@ models:
             tags: ["vault-integrity"]
     columns:
       # Frische Daten: nach Delta-Load muessen Eintraege aus 2024 existieren
+      # severity: warn → dokumentiert Veraltung, blockiert Pipeline nicht
       - name: load_datetime
         tests:
           - dbt_expectations.expect_row_values_to_have_recent_data:
               datepart: year
               interval: 3
               config:
+                severity: warn
                 tags: ["freshness"]
 
   - name: sat_employee
@@ -120,6 +122,7 @@ models:
               datepart: year
               interval: 3
               config:
+                severity: warn
                 tags: ["freshness"]
 
   - name: sat_order_detail

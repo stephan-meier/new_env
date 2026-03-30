@@ -28,6 +28,13 @@ with DAG(
     tags=["init", "raw"],
 ) as dag:
 
+    # Alle dbt-verwalteten Objekte aufraumen (Staging, Vault, Marts).
+    # Verhindert Typ-Konflikte wenn Raw-Tabellen mit neuem Schema geladen werden.
+    drop_dbt_objects = BashOperator(
+        task_id="drop_dbt_objects",
+        bash_command=f"{PSQL} -f {SQL_DIR}/drop_dbt_objects.sql",
+    )
+
     create_tables = BashOperator(
         task_id="create_raw_tables",
         bash_command=f"{PSQL} -f {SQL_DIR}/create_raw_tables.sql",
@@ -42,3 +49,5 @@ with DAG(
             ),
         )
         create_tables >> copy_task
+
+    drop_dbt_objects >> create_tables

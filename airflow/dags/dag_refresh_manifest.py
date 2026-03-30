@@ -34,9 +34,11 @@ with DAG(
     tags=["dbt", "cosmos", "utility"],
 ) as dag:
 
+    # .DS_Store (macOS) blockiert dbt deps rmtree auf gemounteten Volumes.
     dbt_deps = BashOperator(
         task_id="dbt_deps",
         bash_command=(
+            f"find {DBT_PROJECT_PATH}/dbt_packages -name '.DS_Store' -delete 2>/dev/null; "
             f"{DBT_CMD} deps --profiles-dir {DBT_PROJECT_PATH}"
         ),
     )

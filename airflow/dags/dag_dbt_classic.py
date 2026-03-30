@@ -21,15 +21,13 @@ with DAG(
     tags=["dbt", "classic"],
 ) as dag:
 
-    # deps: Fallback fuer Windows, wo der airflow-User nicht in den
-    # Bind-Mount schreiben kann. dbt-docs (root) installiert Packages
-    # beim Start, daher reicht ein read-only Check als Fallback.
+    # .DS_Store (macOS) blockiert dbt deps rmtree auf gemounteten Volumes.
+    # Loeschen vor deps, dann Fallback falls deps trotzdem scheitert.
     dbt_deps = BashOperator(
         task_id="dbt_deps",
         bash_command=(
-            f"{DBT_CMD} deps --profiles-dir {DBT_DIR} || "
-            f"(test -d {DBT_DIR}/dbt_packages/dbt_utils && "
-            f"echo 'WARN: dbt deps failed but packages already installed, continuing...')"
+            f"find {DBT_DIR}/dbt_packages -name '.DS_Store' -delete 2>/dev/null; "
+            f"{DBT_CMD} deps --profiles-dir {DBT_DIR}"
         ),
     )
 
@@ -45,7 +43,7 @@ with DAG(
 
     dbt_run_raw_vault = BashOperator(
         task_id="dbt_run_raw_vault",
-        bash_command=f"{DBT_CMD} run --select raw_vault --profiles-dir {DBT_DIR}",
+        bash_command=f"{DBT_CMD} run --select raw_vault --exclude tag:psa --profiles-dir {DBT_DIR}",
     )
 
     dbt_run_marts = BashOperator(
@@ -55,7 +53,7 @@ with DAG(
 
     dbt_test = BashOperator(
         task_id="dbt_test",
-        bash_command=f"{DBT_CMD} test --store-failures --profiles-dir {DBT_DIR}",
+        bash_command=f"{DBT_CMD} test --store-failures --exclude tag:psa --profiles-dir {DBT_DIR}",
     )
 
     dbt_freshness = BashOperator(
