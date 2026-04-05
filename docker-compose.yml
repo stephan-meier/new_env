@@ -27,9 +27,15 @@ x-airflow-common:
     # weil Airflow 3.0 strikte Param-Validierung einen Hash-Mismatch bei
     # __cosmos_telemetry_metadata__ verursacht (bekannter Bug Cosmos <1.14)
     AIRFLOW__COSMOS__PROPAGATE_TELEMETRY: "False"
+    # include/ fuer eigene Python-Module (ingest.runner etc.) auf PYTHONPATH.
+    # NICHT plugins/ verwenden: Airflow 3 scannt plugins/ rekursiv und versucht
+    # jede .py-Datei als Plugin-Klasse zu laden, was Modul-Imports zur Parse-Zeit
+    # ausfuehrt und bei fehlenden Deps den Scheduler-Start bricht.
+    PYTHONPATH: "/opt/airflow/include"
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/config:/opt/airflow/config
+    - ./airflow/include:/opt/airflow/include
     - ./dbt_project:/usr/app/dbt
     - dbt-target:/usr/app/dbt/target
     - ./daten:/data

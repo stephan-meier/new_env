@@ -1,0 +1,31 @@
+# Beispiel-Ingest-Config: Postgres-Quelle
+# Fuer den PoC wird die bestehende demo-DB als "externe Quelle" genutzt.
+# In der produktiven Variante hier auf echten externen Postgres-Server zeigen.
+
+name: demo_postgres_raw
+type: postgres
+connection_id: demo_postgres       # AIRFLOW_CONN_DEMO_POSTGRES
+source_schema: raw                 # Schema in der Quell-DB
+schedule: "0 2 * * *"
+
+target:
+  destination: postgres
+  connection_id: demo_postgres
+  schema: raw_ingest               # Ziel-Schema (dlt legt es automatisch an)
+  write_disposition: append        # Default fuer alle Tabellen (ueberschreibbar)
+
+tables:
+  - name: customers
+    primary_key: id
+    write_disposition: replace     # Dim-Tabellen komplett neu laden
+
+  - name: orders
+    primary_key: id
+    write_disposition: merge
+    incremental:
+      cursor: order_date
+      initial_value: "1996-01-01"
+
+  - name: order_details
+    primary_key: [order_id, product_id]
+    write_disposition: merge

@@ -1,0 +1,29 @@
+# Beispiel-Ingest-Config: REST-API
+# Datei-Endung .disabled damit DAG-Factory sie ignoriert.
+# Zum Aktivieren: Endung auf .yml aendern, Token hinterlegen.
+
+name: github_issues
+type: rest_api
+base_url: https://api.github.com
+schedule: "0 */6 * * *"
+
+auth:
+  type: bearer
+  token: "${GITHUB_TOKEN}"         # Env-Var im Airflow-Worker
+
+target:
+  destination: postgres
+  connection_id: demo_postgres
+  schema: raw_github
+  write_disposition: merge
+
+resources:
+  - name: issues
+    endpoint: /repos/dlt-hub/dlt/issues
+    params:
+      state: all
+      per_page: 100
+    primary_key: id
+    incremental:
+      cursor: updated_at
+      param: since

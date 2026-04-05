@@ -1,0 +1,35 @@
+# Beispiel-Ingest-Config: Filesystem (CSV-Drops, Parquet, JSONL, ...)
+# Datei-Endung .disabled damit DAG-Factory sie ignoriert.
+#
+# Minimal-Config (normaler CSV-Import):
+#
+#   name: sales_drops
+#   type: filesystem
+#   path: /data/drops
+#   file_glob: "sales_*.csv"
+#   target:
+#     connection_id: demo_postgres
+#     schema: raw_drops
+#
+# format wird aus Dateiendung abgeleitet (*.csv -> csv, *.parquet -> parquet,
+# *.jsonl/*.ndjson -> jsonl). resource_name default = name (hier: sales_drops).
+# Kein primary_key -> kein Dedup, reines Append.
+#
+# Vollversion mit allen Optionen:
+
+name: crawler_output
+type: filesystem
+path: /data/crawler                # Verzeichnis im Worker-Container
+file_glob: "*.parquet"             # Format wird aus .parquet abgeleitet
+schedule: "@hourly"
+
+# Optionale Felder (hier explizit gesetzt):
+format: parquet                    # explizit, ueberschreibt Auto-Detect
+resource_name: scraped_pages       # Tabellenname in target.schema (default: name)
+primary_key: url                   # fuer Dedup/Merge (ohne: reiner Append)
+write_disposition: merge           # append | replace | merge (default: append)
+
+target:
+  destination: postgres
+  connection_id: demo_postgres
+  schema: raw_crawler

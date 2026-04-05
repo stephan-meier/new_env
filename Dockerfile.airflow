@@ -13,6 +13,13 @@ RUN pip install --no-cache-dir \
     "apache-airflow-providers-postgres==6.6.0" \
     "apache-airflow-providers-fab==3.5.0"
 
+# ---------- dlt fuer Ingest-Layer (metadatengetrieben via YAML) ----------
+# sql_database, rest_api, filesystem Sources sind im Core-Package enthalten.
+# Weitere DB-Treiber (oracledb, pymssql) bei Bedarf hier ergaenzen.
+RUN pip install --no-cache-dir \
+    "dlt[postgres]==1.4.1" \
+    "PyYAML>=6.0"
+
 # ---------- dbt in an isolated virtualenv (avoids protobuf / dependency conflicts) ----------
 # dbt-core and Airflow 3 have conflicting transitive deps (protobuf, grpcio).
 # The official Astronomer recommendation is to install dbt in a separate venv
