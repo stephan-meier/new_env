@@ -56,9 +56,13 @@ with DAG(
     )
 
     # --- Phase 3: dbt aus PSA aufbauen ---
+    # Defensive: macOS-Bind-Mount kann .DS_Store-Dateien in dbt_packages legen, die
+    # `dbt deps` beim Aufräumen mit "Directory not empty" abbrechen lassen.
+    # Vorab löschen, dann normal weiter.
     dbt_deps = BashOperator(
         task_id="dbt_deps",
         bash_command=(
+            "find /usr/app/dbt -name .DS_Store -delete 2>/dev/null; "
             f"{DBT} deps --profiles-dir /usr/app/dbt || "
             f"(test -d /usr/app/dbt/dbt_packages/dbt_utils && "
             f"echo 'WARN: dbt deps failed but packages already installed, continuing...')"
