@@ -1,3 +1,5 @@
+-- depends_on: {{ ref('stg_products') }}
+
 {{ automate_dv.sat(src_pk='product_hk',
                     src_hashdiff='product_hashdiff',
                     src_payload=['product_code', 'product_name', 'description',

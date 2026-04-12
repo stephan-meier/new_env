@@ -1,4 +1,5 @@
 {{- config(tags=['psa']) -}}
+-- depends_on: {{ ref('stg_customers_psa') }}
 
 {{ automate_dv.sat(src_pk='customer_hk',
                     src_hashdiff='customer_hashdiff',

@@ -1,4 +1,5 @@
 {{- config(tags=['psa']) -}}
+-- depends_on: {{ ref('stg_customers_psa') }}
 
 {{ automate_dv.hub(src_pk='customer_hk',
                     src_nk='customer_id',

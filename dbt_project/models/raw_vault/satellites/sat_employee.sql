@@ -1,3 +1,5 @@
+-- depends_on: {{ ref('stg_employees') }}
+
 {{ automate_dv.sat(src_pk='employee_hk',
                     src_hashdiff='employee_hashdiff',
                     src_payload=['last_name', 'first_name', 'email',

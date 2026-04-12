@@ -1,3 +1,5 @@
+-- depends_on: {{ ref('stg_order_details') }}
+
 {{ automate_dv.sat(src_pk='order_product_hk',
                     src_hashdiff='order_detail_hashdiff',
                     src_payload=['quantity', 'unit_price', 'discount',

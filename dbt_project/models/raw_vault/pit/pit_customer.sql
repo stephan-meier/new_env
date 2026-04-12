@@ -1,3 +1,6 @@
+-- depends_on: {{ ref('hub_customer') }}
+-- depends_on: {{ ref('sat_customer') }}
+
 {%- set yaml_metadata -%}
 source_model: 'hub_customer'
 src_pk: 'customer_hk'

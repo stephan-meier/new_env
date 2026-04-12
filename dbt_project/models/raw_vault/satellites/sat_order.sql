@@ -1,3 +1,5 @@
+-- depends_on: {{ ref('stg_orders') }}
+
 {{ automate_dv.sat(src_pk='order_hk',
                     src_hashdiff='order_hashdiff',
                     src_payload=['order_date', 'shipped_date', 'ship_name',
